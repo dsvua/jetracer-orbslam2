@@ -96,7 +96,7 @@ int main(int argc, char const *argv[])
     calib_file = "calibration.yaml";
     img_dir = "images_bin";
 
-    vector<string> files = getPicturesFileNames(".");
+    vector<string> files = getPicturesFileNames(calib_file);
     cout << "Calibration files " << endl;
     for(auto&& filename: files){
         cout << filename << endl;
@@ -152,66 +152,68 @@ int main(int argc, char const *argv[])
 
     }
 
+    if (files.size() > 0) {
+        // calibrating each camera
+        printf("Starting intristic Calibration\n");
+        Mat left_K, right_K;
+        Mat left_D, right_D;
+        vector< Mat > left_rvecs, left_tvecs, right_rvecs, right_tvecs;
+        int flag = 0;
+        flag |= CV_CALIB_FIX_K4;
+        flag |= CV_CALIB_FIX_K5;
+        calibrateCamera(object_points, left_img_points, image_size, left_K, left_D, left_rvecs, left_tvecs, flag);
+        calibrateCamera(object_points, right_img_points, image_size, right_K, right_D, right_rvecs, right_tvecs, flag);
 
-    // calibrating each camera
-    printf("Starting intristic Calibration\n");
-    Mat left_K, right_K;
-    Mat left_D, right_D;
-    vector< Mat > left_rvecs, left_tvecs, right_rvecs, right_tvecs;
-    int flag = 0;
-    flag |= CV_CALIB_FIX_K4;
-    flag |= CV_CALIB_FIX_K5;
-    calibrateCamera(object_points, left_img_points, image_size, left_K, left_D, left_rvecs, left_tvecs, flag);
-    calibrateCamera(object_points, right_img_points, image_size, right_K, right_D, right_rvecs, right_tvecs, flag);
+        cout << "Calibration error left: " << computeReprojectionErrors(object_points, left_img_points,
+                    left_rvecs, left_tvecs, left_K, left_D) << endl;
+        cout << "Calibration error right: " << computeReprojectionErrors(object_points, right_img_points,
+                    right_rvecs, right_tvecs, right_K, right_D) << endl;
 
-    cout << "Calibration error left: " << computeReprojectionErrors(object_points, left_img_points,
-                left_rvecs, left_tvecs, left_K, left_D) << endl;
-    cout << "Calibration error right: " << computeReprojectionErrors(object_points, right_img_points,
-                right_rvecs, right_tvecs, right_K, right_D) << endl;
-
-    FileStorage fs_config(calib_file, FileStorage::WRITE);
-    fs_config << "left_K" << left_K;
-    fs_config << "left_D" << left_D;
-    fs_config << "right_K" << right_K;
-    fs_config << "right_D" << right_D;
-    fs_config << "board_width" << board_width;
-    fs_config << "board_height" << board_height;
-    fs_config << "square_size" << square_size;
-    printf("Done intristic Calibration\n");
+        FileStorage fs_config(calib_file, FileStorage::WRITE);
+        fs_config << "left_K" << left_K;
+        fs_config << "left_D" << left_D;
+        fs_config << "right_K" << right_K;
+        fs_config << "right_D" << right_D;
+        fs_config << "board_width" << board_width;
+        fs_config << "board_height" << board_height;
+        fs_config << "square_size" << square_size;
+        printf("Done intristic Calibration\n");
 
 
-    // stereo calibration
+        // stereo calibration
 
-    printf("Starting Stereo Calibration\n");
-    Mat R, F, E;
-    Vec3d T;
-    flag = 0;
-    flag |= CV_CALIB_FIX_INTRINSIC;
+        printf("Starting Stereo Calibration\n");
+        Mat R, F, E;
+        Vec3d T;
+        flag = 0;
+        flag |= CV_CALIB_FIX_INTRINSIC;
 
-    stereoCalibrate(object_points, left_img_points, right_img_points, left_K, left_D, right_K,
-                right_D, image_size, R, T, E, F);
+        stereoCalibrate(object_points, left_img_points, right_img_points, left_K, left_D, right_K,
+                    right_D, image_size, R, T, E, F);
 
-    fs_config << "R" << R;
-    fs_config << "T" << T;
-    fs_config << "E" << E;
-    fs_config << "F" << F;
+        fs_config << "R" << R;
+        fs_config << "T" << T;
+        fs_config << "E" << E;
+        fs_config << "F" << F;
 
-    printf("Done Calibration\n");
+        printf("Done Calibration\n");
 
-    printf("Starting Rectification\n");
+        printf("Starting Rectification\n");
 
-    cv::Mat left_R, right_R, left_P, right_P, Q;
-    stereoRectify(left_K, left_D, right_K, right_D, image_size, R, T,
-                left_R, right_R, left_P, right_P, Q);
+        cv::Mat left_R, right_R, left_P, right_P, Q;
+        stereoRectify(left_K, left_D, right_K, right_D, image_size, R, T,
+                    left_R, right_R, left_P, right_P, Q);
 
-    fs_config << "left_R" << left_R;
-    fs_config << "right_R" << right_R;
-    fs_config << "left_P" << left_P;
-    fs_config << "right_P" << right_P;
-    fs_config << "Q" << Q;
+        fs_config << "left_R" << left_R;
+        fs_config << "right_R" << right_R;
+        fs_config << "left_P" << left_P;
+        fs_config << "right_P" << right_P;
+        fs_config << "Q" << Q;
 
-    printf("Done Rectification\n");
-
+        printf("Done Rectification\n");
+    } else {
+        printf("No images - no calibration!\n");
+    }
     return 0;
 
 }
