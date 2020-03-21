@@ -12,8 +12,6 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 
-// #include "popt_pp.h"
-
 using std::vector;
 using namespace std;
 using namespace cv;
@@ -34,8 +32,9 @@ vector<string> getPicturesFileNames(string path){
     vector<string> files;
 
     for(auto&& dir: dirs){
-        for(auto&& file: globVector((string)(dir + "/*"), GLOB_TILDE)){
-            // std::cout << file << std::endl;
+        for(auto&& file: globVector((string)(dir + "/*.bin"), GLOB_TILDE)){
+            // printf("Adding file %s to files\n", file.c_str());
+            std::cout << file << std::endl;
             files.push_back(file);
         }
     }
@@ -80,66 +79,76 @@ int main(int argc, char const *argv[])
     Size image_size = Size(image_width, image_height);
     int board_n = board_width * board_height;
     size_t imageSize = image_width*image_height*sizeof(uint8_t);
-    uint8_t *left_image, *right_image;
 
     string calib_file;
     string img_dir;
 
-    // static struct poptOption options[] = {
-    //     { "calib_file",'c',POPT_ARG_STRING,&calib_file,0,"Left camera calibration","STR" },
-    //     { "img_dir",'i',POPT_ARG_STRING,&img_dir,0,"Directory containing left images","STR" },
-    //     POPT_AUTOHELP
-    //     { NULL, NULL }
-    // };
-    // POpt popt(NULL, argc, argv, options, 0);
+    calib_file = "calibration_images.yaml";
+    img_dir = "~/Downloads/images_temp/bin";
 
-    calib_file = "calibration.yaml";
-    img_dir = "images_bin";
+    Mat  left_image_gamma;
+    Mat right_image_gamma;
 
-    vector<string> files = getPicturesFileNames(calib_file);
+
+    vector<string> files = getPicturesFileNames(img_dir);
+    std::string s_ops = "rb";
     cout << "Calibration files " << endl;
     for(auto&& filename: files){
-        cout << filename << endl;
-        std::string s_ops = "rb";
+        cout << "Processing: " << filename << endl;
         // const char *c_ops = s_ops.c_str();
-        FILE *file = fopen(filename.c_str(), s_ops.c_str());
-        if (file){
-            left_image = (uint8_t*)malloc(imageSize);
-            right_image = (uint8_t*)malloc(imageSize);
-            fread ( left_image, sizeof(uint8_t), imageSize, file );
-            fread ( right_image, sizeof(uint8_t), imageSize, file );
+        FILE *image_file = fopen(filename.c_str(), s_ops.c_str());
+        // cout << filename << " opened "<< endl;
+        Mat left_image(image_size, CV_8UC1);
+        Mat right_image(image_size, CV_8UC1);
+        if (image_file){
+            // cout << "Reading image " << filename << endl;
+            fread ( (uchar*)left_image.data, sizeof(uchar), imageSize, image_file );
+            fread ( (uchar*)right_image.data, sizeof(uchar), imageSize, image_file );
+            // cout << "Image readed" << filename << endl;
         }
-        fclose(file);
-        // Mat left_image(image_height, image_width, CV_8UC1, &left_image);
-        // Mat right_image(image_height, image_width, CV_8UC1, &right_image);
-        Mat left_image(image_size, CV_8UC1, &left_image);
-        Mat right_image(image_size, CV_8UC1, &right_image);
+        fclose(image_file);
+        // gamma correction for images
+        Mat lookUpTable(1, 256, CV_8U);
+        uchar* p = lookUpTable.ptr();
+        float image_gamma = 0.45;
+        for( int i = 0; i < 256; ++i)
+            p[i] = saturate_cast<uchar>(pow(i / 255.0, image_gamma) * 255.0);
+        left_image_gamma  = left_image.clone();
+        right_image_gamma = right_image.clone();
+        // LUT(left_image, lookUpTable, left_image_gamma);
+        // LUT(right_image, lookUpTable, right_image_gamma);
+
+        imwrite( (filename + "left_cv_gamma.png"), left_image_gamma );
+        imwrite( (filename + "right_cv_gamma.png"), right_image_gamma );
 
         bool left_found = false, right_found = false;
-        left_found = cv::findChessboardCorners(left_image, board_size, left_corners,
+        left_found = cv::findChessboardCorners(left_image_gamma, board_size, left_corners,
                     CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FILTER_QUADS);
-        right_found = cv::findChessboardCorners(right_image, board_size, right_corners,
+        // cout << "left image cv::findChessboardCorners" << endl;
+        right_found = cv::findChessboardCorners(right_image_gamma, board_size, right_corners,
                     CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FILTER_QUADS);
-        if(left_found && right_found){
-            cv::cornerSubPix(left_image, left_corners, cv::Size(5, 5), cv::Size(-1, -1),
-                    cv::TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.1));
-            // cv::drawChessboardCorners(left_image, board_size, left_corners, left_found);
-            cv::cornerSubPix(right_image, right_corners, cv::Size(5, 5), cv::Size(-1, -1),
-                    cv::TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.1));
-            // cv::drawChessboardCorners(right_image, board_size, right_corners, right_found);
+        // cout << "right image cv::findChessboardCorners" << endl;
+        if(!left_found || !right_found){
+            cout << "Chessboard find error for file " << left_found << "**" << right_found << " " << filename << endl;
+            continue;
         }
+
+        cv::cornerSubPix(left_image_gamma, left_corners, cv::Size(11, 11), cv::Size(-1, -1),
+                cv::TermCriteria( TermCriteria::EPS+TermCriteria::COUNT, 30, 0.0001 ));
+        // cv::drawChessboardCorners(left_image_gamma, board_size, left_corners, left_found);
+        cv::cornerSubPix(right_image_gamma, right_corners, cv::Size(11, 11), cv::Size(-1, -1),
+                cv::TermCriteria( TermCriteria::EPS+TermCriteria::COUNT, 30, 0.0001 ));
+        // cv::drawChessboardCorners(right_image_gamma, board_size, right_corners, right_found);
+        // cout << "Corners are searched" << endl;
 
         vector< Point3f > obj;
         for (int i = 0; i < board_height; i++)
             for (int j = 0; j < board_width; j++)
                 obj.push_back(Point3f((float)j * square_size, (float)i * square_size, 0));
 
-        if (left_found && right_found) {
-            cout << filename << ". Found corners!" << endl;
-            left_imagePoints.push_back(left_corners);
-            right_imagePoints.push_back(right_corners);
-            object_points.push_back(obj);
-        }
+        cout << filename << ". Found corners!" << left_corners.size() << " " << obj.size() << endl;
+        left_imagePoints.push_back(left_corners);
+        right_imagePoints.push_back(right_corners);
         for (int i = 0; i < left_imagePoints.size(); i++) {
             vector< Point2f > left_v, right_v;
             for (int j = 0; j < left_imagePoints[i].size(); j++) {
@@ -148,6 +157,9 @@ int main(int argc, char const *argv[])
             }
             left_img_points.push_back(left_v);
             right_img_points.push_back(right_v);
+            object_points.push_back(obj);
+            // cout << "object_points: " << object_points.size() << " left_img_points: " << left_img_points.size() 
+            //         << " right_img_points: " << right_img_points.size() << endl;
         }
 
     }
@@ -161,8 +173,15 @@ int main(int argc, char const *argv[])
         int flag = 0;
         flag |= CV_CALIB_FIX_K4;
         flag |= CV_CALIB_FIX_K5;
+
+        cout << "object_points: " << object_points.size() << " left_img_points: " << left_img_points.size() 
+                    << " right_img_points: " << right_img_points.size() << endl;
+        
+        cout << "calibrating left camera" << endl;
         calibrateCamera(object_points, left_img_points, image_size, left_K, left_D, left_rvecs, left_tvecs, flag);
+        cout << "left camera calibrated, working on right camera" << endl;
         calibrateCamera(object_points, right_img_points, image_size, right_K, right_D, right_rvecs, right_tvecs, flag);
+        cout << "right camera calibrated, working on calibration error" << endl;
 
         cout << "Calibration error left: " << computeReprojectionErrors(object_points, left_img_points,
                     left_rvecs, left_tvecs, left_K, left_D) << endl;
@@ -211,6 +230,18 @@ int main(int argc, char const *argv[])
         fs_config << "Q" << Q;
 
         printf("Done Rectification\n");
+        cv::Mat lmapx, lmapy, rmapx, rmapy;
+        cv::Mat left_imgU, right_imgU;
+        cv::initUndistortRectifyMap(left_K, left_D, left_R, left_P, left_image_gamma.size(), CV_32F, lmapx, lmapy);
+        cv::initUndistortRectifyMap(right_K, right_D, right_R, right_P, right_image_gamma.size(), CV_32F, rmapx, rmapy);
+
+        fs_config << "lmapx" << lmapx;
+        fs_config << "lmapy" << lmapy;
+        fs_config << "rmapx" << rmapx;
+        fs_config << "rmapy" << rmapy;
+
+        cout << "Done with initUndistortRectifyMap" << endl;
+
     } else {
         printf("No images - no calibration!\n");
     }
