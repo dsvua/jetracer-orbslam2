@@ -31,6 +31,9 @@
 
 #include <stdio.h>
 
+// Debug print macros.
+#define CAMERA_PRINT(...) printf("CAMERA: " __VA_ARGS__)
+
 #define LOG_ERROR(_file, _func, _line, _str, ...) \
     do { \
         fprintf(stderr, "Error generated. %s, %s:%d ", _file, _func, _line); \
