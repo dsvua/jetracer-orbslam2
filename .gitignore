@@ -36,3 +36,7 @@
 samples
 test
 build
+
+
+# IntelliJ
+.idea
