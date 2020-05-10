@@ -23,3 +23,16 @@ int main(int argc, char * argv[]) {
 }
 
 // image ignore area: 60px on left and 50px on bottom. 0,0 is top left corner
+
+
+// fit plane to points: plane formula ax + by + c = z
+// Python example
+// # do fit
+// tmp_A = []
+// tmp_b = []
+// for i in range(len(xs)):
+//     tmp_A.append([xs[i], ys[i], 1])
+//     tmp_b.append(zs[i])
+// b = np.matrix(tmp_b).T
+// A = np.matrix(tmp_A)
+// fit = (A.T * A).I * A.T * b

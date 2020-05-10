@@ -40,12 +40,12 @@ namespace Jetracer {
             float theta2 = rd*rd;
             for (int i = 0; i < 4; i++)
             {
-                float f = theta*(1 + theta2*(d_intrinsics->coeffs[0] + theta2*(d_intrinsics->coeffs[1] + theta2*(d_intrinsics->coeffs[2] + theta2*intrin->coeffs[3])))) - rd;
+                float f = theta*(1 + theta2*(d_intrinsics->coeffs[0] + theta2*(d_intrinsics->coeffs[1] + theta2*(d_intrinsics->coeffs[2] + theta2*d_intrinsics->coeffs[3])))) - rd;
                 if (abs(f) < FLT_EPSILON)
                 {
                     break;
                 }
-                float df = 1 + theta2*(3 * d_intrinsics->coeffs[0] + theta2*(5 * d_intrinsics->coeffs[1] + theta2*(7 * d_intrinsics->coeffs[2] + 9 * theta2*intrin->coeffs[3])));
+                float df = 1 + theta2*(3 * d_intrinsics->coeffs[0] + theta2*(5 * d_intrinsics->coeffs[1] + theta2*(7 * d_intrinsics->coeffs[2] + 9 * theta2*d_intrinsics->coeffs[3])));
                 theta -= f / df;
                 theta2 = theta*theta;
             }
@@ -103,8 +103,10 @@ namespace Jetracer {
         checkCudaError(err, "cudaMalloc");
         err = cudaMemcpy(d_depth_image, (void*)depth_frame.get_data(), mallocSize, cudaMemcpyHostToDevice);
         checkCudaError(err, "cudaMemcpy");
+        
         float3* d_point_cloud;
-        err = cudaMalloc(&d_point_cloud, (h_ctx.width-left_gap)*(h_ctx.height-bottom_gap)*sizeof(float3));
+        size_t point_cloud_size = (h_ctx.width-left_gap)*(h_ctx.height-bottom_gap)*sizeof(float3);
+        err = cudaMalloc(&d_point_cloud, point_cloud_size);
         checkCudaError(err, "cudaMalloc");
 
         dim3 block(8, 8);
@@ -115,8 +117,10 @@ namespace Jetracer {
         err = cudaGetLastError();
         checkCudaError(err, "gpu_deproject_pixel_to_point kernel");
 
-        // err = cudaMemcpy(image, d_image, mallocSize, cudaMemcpyDeviceToHost);
-        // checkCudaError(err, "cudaMemcpy");
+        float3* h_point_cloud;
+        h_point_cloud = (float3*)malloc(point_cloud_size);
+        err = cudaMemcpy(h_point_cloud, d_point_cloud, point_cloud_size, cudaMemcpyDeviceToHost);
+        checkCudaError(err, "cudaMemcpy");
 
         // err = cudaDeviceSynchronize();
         // checkCudaError(err, "cudaDeviceSynchronize");

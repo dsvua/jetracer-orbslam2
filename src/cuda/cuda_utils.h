@@ -1,4 +1,4 @@
-
+#include <stdio.h>
 #include <cuda.h>
 
 #ifndef JETRACER_CUDA_UTILS_H
