@@ -1,2 +1,1 @@
-# jetracer-orbslam2
-Orb-slam2 optimized for CUDA and Jetson
+### This is junckyard repo for my experiments - do not use it
