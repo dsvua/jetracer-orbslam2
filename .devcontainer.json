@@ -1,0 +1,21 @@
+{
+  "name": "depth project",
+  "dockerFile": "Dockerfile",
+  "runArgs": ["--privileged",
+    "--gpus", "all",
+	  "-e DISPLAY=1",
+	  "-e QT_X11_NO_MITSHM=1"
+  ],
+  "mounts": [
+    "source=/dev/bus/usb,target=/dev/bus/usb,type=bind",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+ ],
+ "extensions": ["ms-vscode.cpptools","ms-vscode.cmake-tools","ms-azuretools.vscode-docker"],
+
+ "containerEnv": {
+//     // "PATH": "${localEnv:PATH}:/usr/local/cuda/bin",
+//     // "LD_LIBRARY_PATH": "LD_LIBRARY_PATH=${localEnv:LD_LIBRARY_PATH}:/usr/local/cuda/lib:/usr/local/lib",
+//     // "CPLUS_INCLUDE_PATH": "/usr/local/cuda/include"
+      "CPATH": "CPATH=/usr/local/cuda/targets/x86_64-linux/include"
+  },
+}

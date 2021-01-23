@@ -1,0 +1,107 @@
+
+#include "EventsThread.h"
+#include <iostream>
+
+namespace Jetracer
+{
+    EventsThread::EventsThread(const std::string threadName) : THREAD_NAME(threadName), m_thread(0)
+    {
+    }
+
+    EventsThread::~EventsThread()
+    {
+        exitThread();
+    }
+
+    bool EventsThread::createThread()
+    {
+        if (!m_thread)
+            m_thread = new std::thread(&EventsThread::process, this);
+        return true;
+    }
+
+    std::thread::id EventsThread::getThreadId()
+    {
+        ASSERT_TRUE(m_thread != 0);
+        return m_thread->get_id();
+    }
+
+    std::thread::id EventsThread::getCurrentThreadId()
+    {
+        return std::this_thread::get_id();
+    }
+
+    void EventsThread::exitThread()
+    {
+        if (!m_thread)
+            return;
+
+        // Create a new ThreadMsg
+        pEvent event = std::make_shared<BaseEvent>();
+        event->event_type = EventType::event_stop_thread;
+
+        std::cout << "Sent event_stop_thread event, prepare to join" << std::endl;
+        // Put exit thread message into the queue
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_queue.push(event);
+        m_mutex.unlock();
+        m_cv.notify_one();
+
+        std::cout << "Joining threads in " << THREAD_NAME << std::endl;
+        m_thread->join();
+        delete m_thread;
+        m_thread = 0;
+    }
+
+    bool EventsThread::pushEvent(pEvent event)
+    {
+        // std::cout << "Got message, adding to queue" << std::endl;
+        // Add event to queue and notify threadExecute
+        std::unique_lock<std::mutex> lk(m_mutex);
+        m_queue.push(event);
+        m_cv.notify_one();
+
+        return true;
+    }
+
+    void EventsThread::process()
+    {
+        while (1)
+        {
+            pEvent event;
+            {
+                // Wait for a message to be added to the queue
+                std::unique_lock<std::mutex> lk(m_mutex);
+                while (m_queue.empty())
+                    m_cv.wait(lk);
+
+                if (m_queue.empty())
+                    continue;
+
+                event = m_queue.front();
+                m_queue.pop();
+            }
+
+            std::cout << "Got event " << event->event_type << " in " << THREAD_NAME << std::endl;
+            handleEvent(event);
+
+            switch (event->event_type)
+            {
+            case EventType::event_stop_thread:
+            {
+                // std::cout << "Got event event_stop_thread in " << THREAD_NAME << std::endl;
+                // std::unique_lock<std::mutex> lk(m_mutex);
+                while (!m_queue.empty())
+                {
+                    event = m_queue.front();
+                    m_queue.pop();
+                }
+                return;
+            }
+
+            default:
+                break;
+            }
+        }
+    }
+} // namespace Jetracer
