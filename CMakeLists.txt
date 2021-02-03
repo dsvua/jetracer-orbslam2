@@ -1,33 +1,43 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(jetracer)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.10.0 FATAL_ERROR)
 
-#ds determine build type, default build type: release
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE RELEASE)
-endif()
-message("${PROJECT_NAME}|build type: '${CMAKE_BUILD_TYPE}'")
+INCLUDE(GNUInstallDirs)
 
-#ds flags for release build
-if("${CMAKE_BUILD_TYPE}" STREQUAL "Release" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIC -std=c++11 -Wall -Werror -pedantic -DNDEBUG")
-  message("${PROJECT_NAME}|adding flags for '${CMAKE_BUILD_TYPE}': '-O3 -fPIC -std=c++11 -Wall -Werror -pedantic -DNDEBUG'")
+SET(PROJECT_NAME jetracer)
+PROJECT(${PROJECT_NAME} LANGUAGES CUDA CXX)
 
-#ds flags for other build(s) (e.g. debug)
-else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Werror -pedantic -O0 -g -fstack-check")
-  message("${PROJECT_NAME}|adding flags for '${CMAKE_BUILD_TYPE}': '-std=c++11 -Wall -Werror -pedantic -O0 -g -fstack-check'")
+if(NOT DEFINED CMAKE_CUDA_STANDARD)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)    
 endif()
 
-#ds enable ARM flags if applicable
-if("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "armv7l")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funsafe-math-optimizations")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funsafe-math-optimizations")
-  message("${PROJECT_NAME}|enabling ARM neon optimizations")
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)    
 endif()
 
-#ds load Eigen library
-#find_package(Eigen3 REQUIRED)
-#message("${PROJECT_NAME}|using Eigen version: '3' (${EIGEN3_INCLUDE_DIR})")
+include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}) 
+link_directories(${CMAKE_CUDA_INCLUDE_DIRS})
+
+find_library(CUDART_LIBRARY cudart ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NVJPEG_LIBRARY nvjpeg ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(ASIO_LIBRARY asio)
+find_library(WEBSOCKETPP_LIBRARY websocketpp)
+# find_library(NPPIG_LIBRARY nppig ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+# find_library(NPPC_LIBRARY nppc ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+# find_library(CULIBOS culibos ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+
+# ---[ Use the default installation path if not set.
+IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    SET(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "" FORCE)
+ENDIF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+
+# ---[ Build type
+IF(NOT CMAKE_BUILD_TYPE) 
+    SET(CMAKE_BUILD_TYPE Develop)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+
+
+
 
 #ds set sources
 message("${PROJECT_NAME}|final flags: '${CMAKE_CXX_FLAGS}'")

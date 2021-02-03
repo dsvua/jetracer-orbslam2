@@ -36,7 +36,9 @@
 samples
 test
 build
+images_temp
 
 
-# IntelliJ
+# IDE
 .idea
+.vscode

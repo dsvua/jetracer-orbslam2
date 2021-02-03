@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     while (!quit)
     {
         sleep(1);
-        cout << "quit=" << quit << endl;
+        // cout << "quit=" << quit << endl;
     };
 
     // caught CTRL+C

@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libx11-6 \
     glmark2 \
+    libasio-dev \
+    libwebsocketpp-dev \
     build-essential \
     gdb qt5dxcb-plugin libxml2 \
     libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev \

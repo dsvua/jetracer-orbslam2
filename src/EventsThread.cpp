@@ -56,12 +56,25 @@ namespace Jetracer
     bool EventsThread::pushEvent(pEvent event)
     {
         // std::cout << "Got message, adding to queue" << std::endl;
-        // Add event to queue and notify threadExecute
+        // Add event to queue and notify process method
         std::unique_lock<std::mutex> lk(m_mutex);
-        m_queue.push(event);
-        m_cv.notify_one();
+        // prevent queue explosion when events processed slower then events coming in
+        if (event->event_type == EventType::event_stop_thread || m_queue.size() < max_queue_length)
+        {
+            m_queue.push(event);
+            m_cv.notify_one();
+        }
+        else
+        {
+            // std::cout << "Skipping message in " << THREAD_NAME << " thread, total messages: " << m_queue.size() << std::endl;
+        }
 
         return true;
+    }
+
+    void EventsThread::setMaxQueueLength(int new_max_queue_length)
+    {
+        max_queue_length = new_max_queue_length;
     }
 
     void EventsThread::process()
@@ -80,9 +93,10 @@ namespace Jetracer
 
                 event = m_queue.front();
                 m_queue.pop();
+                m_mutex.unlock();
             }
 
-            std::cout << "Got event " << event->event_type << " in " << THREAD_NAME << std::endl;
+            // std::cout << "Got event " << event->event_type << " in " << THREAD_NAME << std::endl;
             handleEvent(event);
 
             switch (event->event_type)
@@ -90,7 +104,7 @@ namespace Jetracer
             case EventType::event_stop_thread:
             {
                 // std::cout << "Got event event_stop_thread in " << THREAD_NAME << std::endl;
-                // std::unique_lock<std::mutex> lk(m_mutex);
+                std::unique_lock<std::mutex> lk(m_mutex);
                 while (!m_queue.empty())
                 {
                     event = m_queue.front();

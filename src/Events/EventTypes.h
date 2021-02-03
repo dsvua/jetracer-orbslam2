@@ -6,9 +6,10 @@
 namespace Jetracer
 {
 
+    // when adding new EventType do not forget to add it
+    // in EventTypes.cpp for operator<< overload
     enum class EventType
     {
-
         // thread events
         event_start_thread,
         event_stop_thread,
@@ -16,6 +17,12 @@ namespace Jetracer
         // keep alive
         event_ping,
         event_pong,
+
+        // Realsense D400 events
+        event_realsense_D400_rgb,
+        event_realsense_D400_rgbd,
+        event_realsense_D400_accel,
+        event_realsense_D400_gyro,
     };
 
     std::ostream &operator<<(std::ostream &os, EventType &event_type);

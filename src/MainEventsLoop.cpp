@@ -1,6 +1,8 @@
 #include "MainEventsLoop.h"
 #include "PingPong.h"
 #include "RealSense/RealSenseD400.h"
+#include "RealSense/SaveRawData.h"
+#include "WebSocket/WebSocketCom.h"
 #include <iostream>
 
 // #include <memory>
@@ -29,12 +31,24 @@ namespace Jetracer
             return true;
         };
 
-        std::cout << "Starting PingPong" << std::endl;
-        _started_threads.push_back(new Jetracer::PingPong("PingPong", _ctx));
-        _started_threads.back()->createThread();
+        // std::cout << "Starting PingPong" << std::endl;
+        // _started_threads.push_back(new Jetracer::PingPong("PingPong", _ctx));
+        // _started_threads.back()->setMaxQueueLength(_ctx->PingPong_max_queue_legth);
+        // _started_threads.back()->createThread();
 
         std::cout << "Starting RealSenseD400" << std::endl;
         _started_threads.push_back(new Jetracer::RealSenseD400("RealSenseD400", _ctx));
+        _started_threads.back()->setMaxQueueLength(_ctx->RealSenseD400_max_queue_legth);
+        _started_threads.back()->createThread();
+
+        // std::cout << "Starting SaveRawData" << std::endl;
+        // _started_threads.push_back(new Jetracer::SaveRawData("SaveRawData", _ctx));
+        // _started_threads.back()->setMaxQueueLength(_ctx->SaveRawData_max_queue_legth);
+        // _started_threads.back()->createThread();
+
+        std::cout << "Starting WebSocket" << std::endl;
+        _started_threads.push_back(new Jetracer::WebSocketCom("WebSocketCom", _ctx));
+        _started_threads.back()->setMaxQueueLength(_ctx->WebSocketCom_max_queue_legth);
         _started_threads.back()->createThread();
     }
 
@@ -78,10 +92,13 @@ namespace Jetracer
 
         default:
         {
+            // std::cout << "Got event in MainLoop " << event->event_type << std::endl;
+
             for (auto &subscriber : _subscribers[event->event_type])
             {
-                std::function<bool(pEvent)> pushEventToSubscriber = subscriber.second;
-                pushEventToSubscriber(event);
+                // std::function<bool(pEvent)> pushEventToSubscriber = subscriber.second;
+                // pushEventToSubscriber(event);
+                subscriber.second(event);
             }
             break;
         }

@@ -40,6 +40,10 @@ namespace Jetracer
         /// @param[in] event - thread specific information created on the heap using operator new.
         bool pushEvent(pEvent event);
 
+        /// set max_queue_length.
+        /// @param[in] max_queue_length - thread specific information created on the heap using operator new.
+        void setMaxQueueLength(int new_max_queue_length);
+
         std::string THREAD_NAME;
 
     protected:
@@ -53,6 +57,7 @@ namespace Jetracer
     private:
         EventsThread(const EventsThread &);
         EventsThread &operator=(const EventsThread &);
+        int max_queue_length = 10;
 
         /// Entry point for the worker thread
         void process();
