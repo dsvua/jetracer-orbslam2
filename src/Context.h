@@ -20,6 +20,7 @@ namespace Jetracer
         int RealSenseD400_max_queue_legth = 3;
         int SaveRawData_max_queue_legth = 1;
         int WebSocketCom_max_queue_legth = 2;
+        int SlamGpuPipeline_max_queue_legth = 2;
         // int max_queue_legth = 10;
         int frames_to_skip = 30; // discard all frames until start_frame to
                                  // give autoexposure, etc. a chance to settle

@@ -7,6 +7,7 @@ ADD_LIBRARY(${PROJECT_NAME}_library
     PingPong.cpp
     RealSense/RealSenseD400.cpp
     WebSocket/WebSocketCom.cpp
+    SlamGpuPipeline/SlamGpuPipeline.cpp
 )
 
 ADD_LIBRARY(${PROJECT_NAME}_library_gpu

@@ -3,6 +3,8 @@
 #include "RealSense/RealSenseD400.h"
 #include "RealSense/SaveRawData.h"
 #include "WebSocket/WebSocketCom.h"
+#include "SlamGpuPipeline/SlamGpuPipeline.h"
+
 #include <iostream>
 
 // #include <memory>
@@ -49,6 +51,11 @@ namespace Jetracer
         std::cout << "Starting WebSocket" << std::endl;
         _started_threads.push_back(new Jetracer::WebSocketCom("WebSocketCom", _ctx));
         _started_threads.back()->setMaxQueueLength(_ctx->WebSocketCom_max_queue_legth);
+        _started_threads.back()->createThread();
+
+        std::cout << "Starting SlamGpuPipeline" << std::endl;
+        _started_threads.push_back(new Jetracer::SlamGpuPipeline("SlamGpuPipeline", _ctx));
+        _started_threads.back()->setMaxQueueLength(_ctx->SlamGpuPipeline_max_queue_legth);
         _started_threads.back()->createThread();
     }
 
