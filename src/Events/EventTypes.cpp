@@ -55,6 +55,18 @@ namespace Jetracer
             break;
         }
 
+        case EventType::event_gpu_callback:
+        {
+            os << "event_gpu_callback";
+            break;
+        }
+
+        case EventType::event_gpu_slam_frame:
+        {
+            os << "event_gpu_slam_frame";
+            break;
+        }
+
         default:
             break;
         }

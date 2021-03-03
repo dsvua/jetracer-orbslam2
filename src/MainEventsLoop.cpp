@@ -1,11 +1,12 @@
 #include "MainEventsLoop.h"
-#include "PingPong.h"
+#include "PingPong/PingPong.h"
 #include "RealSense/RealSenseD400.h"
 #include "RealSense/SaveRawData.h"
 #include "WebSocket/WebSocketCom.h"
 #include "SlamGpuPipeline/SlamGpuPipeline.h"
 
 #include <iostream>
+#include <unistd.h> // for sleep function
 
 // #include <memory>
 
@@ -55,7 +56,7 @@ namespace Jetracer
 
         std::cout << "Starting SlamGpuPipeline" << std::endl;
         _started_threads.push_back(new Jetracer::SlamGpuPipeline("SlamGpuPipeline", _ctx));
-        _started_threads.back()->setMaxQueueLength(_ctx->SlamGpuPipeline_max_queue_legth);
+        _started_threads.back()->setMaxQueueLength(_ctx->SlamGpuPipeline_max_queue_length);
         _started_threads.back()->createThread();
     }
 
@@ -83,30 +84,34 @@ namespace Jetracer
     void MainEventsLoop::handleEvent(pEvent event)
     {
 
+        // std::cout << "MainEventsLoop distribute event " << event->event_type << std::endl;
+
+        for (auto &subscriber : _subscribers[event->event_type])
+        {
+            // std::function<bool(pEvent)> pushEventToSubscriber = subscriber.second;
+            // pushEventToSubscriber(event);
+            subscriber.second(event);
+        }
+
+        // std::cout << "MainEventsLoop handle switch event " << event->event_type << std::endl;
+
         switch (event->event_type)
         {
         case EventType::event_stop_thread:
         {
-            std::unique_lock<std::mutex> lk(m_mutex);
             std::cout << "MainEventsLoop::handleEvent() EventType::event_stop_thread" << std::endl;
-            for (auto started_thread : _started_threads)
+            for (auto running_thread : _started_threads)
             {
-                std::cout << "Sending exitThread to " << started_thread->THREAD_NAME << std::endl;
-                started_thread->exitThread();
+                std::cout << "Sending exitThread to " << running_thread->THREAD_NAME << std::endl;
+                running_thread->exitThread();
             }
+            std::cout << "All threads exited " << std::endl;
             break;
         }
 
         default:
         {
             // std::cout << "Got event in MainLoop " << event->event_type << std::endl;
-
-            for (auto &subscriber : _subscribers[event->event_type])
-            {
-                // std::function<bool(pEvent)> pushEventToSubscriber = subscriber.second;
-                // pushEventToSubscriber(event);
-                subscriber.second(event);
-            }
             break;
         }
         }

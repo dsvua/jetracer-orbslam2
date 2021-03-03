@@ -23,6 +23,10 @@ namespace Jetracer
         event_realsense_D400_rgbd,
         event_realsense_D400_accel,
         event_realsense_D400_gyro,
+
+        // GPU events
+        event_gpu_callback,
+        event_gpu_slam_frame,
     };
 
     std::ostream &operator<<(std::ostream &os, EventType &event_type);

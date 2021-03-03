@@ -9,6 +9,7 @@
 #include <cstring> // for memcpy
 
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
+#include <opencv2/core/cuda.hpp>
 #include <nvjpeg.h>
 
 // using namespace std;
@@ -76,7 +77,7 @@ namespace Jetracer
             // CHECK_NVJPEG(nvjpegEncoderParamsSetOptimizedHuffman(nv_enc_params, 0, NULL));
 
             nvjpegImage_t nv_image;
-            const unsigned char *casted_image = static_cast<const unsigned char *>(rgb_frame->rgb);
+            const unsigned char *casted_image = static_cast<const unsigned char *>(rgb_frame->depth_frame.get_data());
             int image_channel_size = _ctx->cam_w * _ctx->cam_h;
             // Fill nv_image with image data, let’s say 848x480 image in RGB format
             for (int i = 0; i < 3; i++)
@@ -100,8 +101,8 @@ namespace Jetracer
 
             std::string filename;
 
-            filename = _ctx->images_path + "rgb_" + std::to_string(rgb_frame->timestamp) + ".jpg";
-            std::cout << "Saving file " << filename << " size " << std::to_string(rgb_frame->image_size) << std::endl;
+            filename = _ctx->images_path + "rgb_" + std::to_string(rgb_frame->rgb_frame.get_timestamp()) + ".jpg";
+            std::cout << "Saving file " << filename << " size " << std::to_string(_ctx->cam_w * _ctx->cam_h * 3) << std::endl;
 
             // write stream to file
             CHECK_CUDA(cudaStreamSynchronize(stream));
@@ -120,18 +121,18 @@ namespace Jetracer
 
             std::string filename;
 
-            filename = _ctx->images_path + "infrared_" + std::to_string(rgbd_frame->timestamp) + ".bin";
+            filename = _ctx->images_path + "color_" + std::to_string(rgbd_frame->rgb_frame.get_timestamp()) + ".bin";
             // std::cout << "Saving file " << filename << " size " << std::to_string(rgbd_frame->image_size) << std::endl;
             std::ofstream image_file(filename, std::ofstream::binary);
-            const char *image_buffer = static_cast<const char *>(rgbd_frame->lefr_ir);
-            image_file.write(image_buffer, rgbd_frame->image_size);
+            const char *image_buffer = static_cast<const char *>(rgbd_frame->rgb_frame.get_data());
+            image_file.write(image_buffer, _ctx->cam_w * _ctx->cam_h * 3);
             image_file.close();
 
-            filename = _ctx->images_path + "depth_" + std::to_string(rgbd_frame->timestamp) + ".bin";
+            filename = _ctx->images_path + "depth_" + std::to_string(rgbd_frame->depth_frame.get_timestamp()) + ".bin";
             // std::cout << "Saving file " << filename << " size " << std::to_string(rgbd_frame->depth_size) << std::endl;
             std::ofstream depth_file(filename, std::ofstream::binary);
-            const char *depth_buffer = static_cast<const char *>(rgbd_frame->depth);
-            depth_file.write(depth_buffer, rgbd_frame->depth_size);
+            const char *depth_buffer = static_cast<const char *>(rgbd_frame->depth_frame.get_data());
+            depth_file.write(depth_buffer, _ctx->cam_w * _ctx->cam_h * 2);
             depth_file.close();
 
             break;

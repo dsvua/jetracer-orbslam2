@@ -45,19 +45,19 @@ namespace Jetracer
         void setMaxQueueLength(int new_max_queue_length);
 
         std::string THREAD_NAME;
-
-    protected:
-        virtual void handleEvent(pEvent event){};
-
         std::thread *m_thread;
         std::queue<pEvent> m_queue;
         std::mutex m_mutex;
         std::condition_variable m_cv;
 
+    protected:
+        virtual void handleEvent(pEvent event){};
+
     private:
         EventsThread(const EventsThread &);
         EventsThread &operator=(const EventsThread &);
         int max_queue_length = 10;
+        bool quit_thread = false;
 
         /// Entry point for the worker thread
         void process();

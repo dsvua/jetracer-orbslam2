@@ -3,10 +3,10 @@
 
 #include <iostream>
 
-#include "EventsThread.h"
-#include "Context.h"
-#include "Events/BaseEvent.h"
-#include "Events/EventTypes.h"
+#include "../EventsThread.h"
+#include "../Context.h"
+#include "../Events/BaseEvent.h"
+#include "../Events/EventTypes.h"
 #include <mutex>
 #include <atomic>
 #include <thread>

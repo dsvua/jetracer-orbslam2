@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import { connectionStateIsConnected, connectionStateWs } from '../state/network'
 import { videoImage, videoImageParams } from '../state/video'
+import { slamKeypoints } from '../state/slam'
 import BSON from 'bson';
 
 export const useWebsocket = () => {
@@ -9,6 +10,7 @@ export const useWebsocket = () => {
     const setIsConnected = useSetRecoilState(connectionStateIsConnected);
     const setVideoImageParams = useSetRecoilState(videoImageParams);
     const setNewVideoImage = useSetRecoilState(videoImage);
+    const setNewSlamKeyPoints = useSetRecoilState(slamKeypoints);
     const [ws, setWs] = useRecoilState(connectionStateWs);
 
     useEffect( () => {
@@ -40,8 +42,13 @@ export const useWebsocket = () => {
                     imageParams.channels = msg.channels;
 
                     // console.log("image pixel:", msg);
-                    setNewVideoImage(msg.image.buffer);
+                    setNewVideoImage({
+                        image: new Uint8Array(msg.image.buffer),
+                        x: Uint8Array.from(msg.keypoints_x.buffer),
+                        y: Uint8Array.from(msg.keypoints_y.buffer)
+                    });
                     setVideoImageParams(imageParams);
+                    // setNewSlamKeyPoints({x: msg.keypoints_x.buffer, y: msg.keypoints_y.buffer})
                 };
         
                 try {

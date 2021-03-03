@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <unistd.h> // for sleep function
 #include "MainEventsLoop.h"
+#include "Events/BaseEvent.h"
 
 using namespace std;
 
@@ -43,6 +44,11 @@ int main(int argc, char *argv[])
     // caught CTRL+C
     cout << "caught CTRL+C" << endl;
     cout << "Closing thread: mainLoop in main" << endl;
+    Jetracer::pEvent event = std::make_shared<Jetracer::BaseEvent>();
+    event->event_type = Jetracer::EventType::event_stop_thread;
+    mainLoop.pushEvent(event);
+    cout << "Main sleep" << endl;
+    sleep(5);
     mainLoop.exitThread();
     return 0;
 }

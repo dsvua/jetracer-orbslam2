@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 #include <algorithm> // for std::find_if
+#include <librealsense2/rs_advanced_mode.hpp>
 
 // using namespace std;
 
@@ -24,22 +25,55 @@ namespace Jetracer
             if (fs)
             {
                 // With callbacks, all synchronized streams will arrive in a single frameset
-                for (const rs2::frame &f : fs)
+                for (auto &&fr : fs)
                 {
-                    // std::cout << " " << f.get_profile().stream_name(); // will print: Depth Infrared 1
+                    std::cout << " " << fr.get_profile().stream_name(); // will print: Depth Infrared 1
                 }
-                // std::cout << std::endl;
 
-                rgbd_frame_t rgbd_frame;
-                rgbd_frame.depth = fs.get_depth_frame().get_data();
-                rgbd_frame.lefr_ir = fs.get_infrared_frame().get_data();
-                rgbd_frame.timestamp = fs.get_depth_frame().get_timestamp();
-                rgbd_frame.depth_size = fs.get_depth_frame().get_data_size();
-                rgbd_frame.image_size = fs.get_infrared_frame().get_data_size();
-                rgbd_frame.frame_type = RS2_STREAM_INFRARED;
+                std::cout << " frame id: " << fs.get_depth_frame().get_frame_number()
+                          << " " << fs.get_infrared_frame().get_frame_number()
+                          << " " << fs.get_color_frame().get_frame_number() << std::endl;
+                // std::cout << " frame id: " << fs.get_depth_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << " "
+                //           << fs.get_color_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << std::endl;
+
+                auto rs_depth_frame = fs.get_depth_frame();
+                auto rs_rgb_frame = fs.get_color_frame();
+                auto image_height = rs_depth_frame.get_height();
+                auto image_width = rs_depth_frame.get_width();
+
+                fs.keep();
+                rs_depth_frame.keep();
+                rs_rgb_frame.keep();
+
+                auto rgbd_frame = std::make_shared<rgbd_frame_t>();
+
+                rgbd_frame->depth_frame = rs_depth_frame;
+                rgbd_frame->rgb_frame = rs_rgb_frame;
+
+                // rgbd_frame->timestamp = rs_depth_frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+                // rgbd_frame->frame_id = rs_rgb_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+
+                // auto depth_profile = rs_depth_frame.get_profile().as<rs2::video_stream_profile>();
+                // auto rgb_profile = rs_rgb_frame.get_profile().as<rs2::video_stream_profile>();
+
+                // rgbd_frame->depth_intristics = depth_profile.get_intrinsics();
+                // rgbd_frame->rgb_intristics = rgb_profile.get_intrinsics();
+                // rgbd_frame->extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
+
+                // rgbd_frame->depth_scale = rs_depth_frame.get_units();
+
+                // rgbd_frame->original_frame = fs;
+                // rgbd_frame->depth = fs.get_depth_frame().get_data();
+                // rgbd_frame->rgb = fs.get_color_frame().get_data();
+                // rgbd_frame->lefr_ir = fs.get_infrared_frame().get_data();
+                // rgbd_frame->depth_size = fs.get_depth_frame().get_data_size();
+                // rgbd_frame->image_size = fs.get_color_frame().get_data_size();
+                // rgbd_frame->frame_type = RS2_STREAM_COLOR;
+                // rgbd_frame->frame_type = RS2_STREAM_INFRARED;
+                // rgbd_frame->RS400_callback = std::chrono::high_resolution_clock::now();
 
                 event->event_type = EventType::event_realsense_D400_rgbd;
-                event->message = std::make_shared<rgbd_frame_t>(rgbd_frame);
+                event->message = rgbd_frame;
                 this->_ctx->sendEvent(event);
 
                 // sending RGB color image
@@ -55,7 +89,7 @@ namespace Jetracer
             }
             else
             {
-                // std::cout << " " << frame.get_profile().stream_name();
+                // std::cout << " " << frame.get_profile().stream_name() << std::endl;
                 switch (frame.get_profile().stream_type())
                 {
                 case RS2_STREAM_GYRO:
@@ -98,28 +132,50 @@ namespace Jetracer
             // std::cout << std::endl;
         };
 
-        // auto pushEventCallback = [this](pEvent event) -> bool {
-        //     this->pushEvent(event);
-        //     return true;
-        // };
+        auto pushEventCallback = [this](pEvent event) -> bool {
+            this->pushEvent(event);
+            return true;
+        };
 
+        _ctx->subscribeForEvent(EventType::event_stop_thread, threadName, pushEventCallback);
         // _ctx->subscribeForEvent(EventType::event_ping, threadName, pushEventCallback);
         // _ctx->subscribeForEvent(EventType::event_pong, threadName, pushEventCallback);
 
         //Add desired streams to configuration
         cfg.enable_stream(RS2_STREAM_INFRARED, 1, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_Y8, _ctx->fps); // fps for 848x480: 30, 60, 90
-        // cfg.enable_stream(RS2_STREAM_COLOR, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_RGB8, 60);
+        cfg.enable_stream(RS2_STREAM_COLOR, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_RGB8, _ctx->fps);
         cfg.enable_stream(RS2_STREAM_DEPTH, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_Z16, _ctx->fps);
-        cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250); // 63 and 250
-        cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);  // 200 and 400
+        // cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 63); // 63 or 250
+        // cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);  // 200 or 400
 
         // Start the camera pipeline
-        selection = pipe.start(cfg, callbackNewFrame);
+        // selection = pipe.start(cfg, callbackNewFrame);
+        // selection = pipe.start(cfg);
+
+        // for (int i = 0; i < _ctx->RealSenseD400_autoexposure_settle_frame; i++)
+        //     pipe.wait_for_frames();
 
         // disabling laser
-        rs2::device selected_device = selection.get_device();
-        auto depth_sensor = selected_device.first<rs2::depth_sensor>();
-        depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+        // rs2::device selected_device = selection.get_device();
+        // auto depth_sensor = selected_device.first<rs2::depth_sensor>();
+        // auto color_sensor = selected_device.first<rs2::color_sensor>();
+
+        // auto advanced_mode_depth = depth_sensor.as<rs400::advanced_mode>();
+        // auto STAEControl_depth = advanced_mode_depth.get_ae_control();
+        // STAEControl_depth.meanIntensitySetPoint = 2300;
+        // advanced_mode_depth.set_ae_control(STAEControl_depth);
+
+        // depth_sensor.set_option(RS2_OPTION_FRAMES_QUEUE_SIZE, 0);
+        // color_sensor.set_option(RS2_OPTION_FRAMES_QUEUE_SIZE, 0);
+        // depth_sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+        // color_sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+        // depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+        // day
+        // depth_sensor.set_option(RS2_OPTION_EXPOSURE, 5715.f);     // Change exposure for D455
+        // depth_sensor.set_option(RS2_OPTION_GAIN, 41.f);           // Change gain for D455
+        // night
+        // depth_sensor.set_option(RS2_OPTION_EXPOSURE, 24286.f); // Change exposure for D455
+        // depth_sensor.set_option(RS2_OPTION_GAIN, 85.f);        // Change gain for D455
 
         // Each depth camera might have different units for depth pixels, so we get it here
         // Using the pipeline's profile, we can retrieve the device that the pipeline uses
@@ -133,6 +189,9 @@ namespace Jetracer
         // rs2::align allows us to perform alignment of depth frames to others frames
         // The "align_to" is the stream type to which we plan to align depth frames.
         // auto align(align_to);
+
+        // pipe.stop();
+        selection = pipe.start(cfg, callbackNewFrame);
 
         // Get camera intrinsics
         auto depth_stream = selection.get_stream(RS2_STREAM_DEPTH)
@@ -158,7 +217,9 @@ namespace Jetracer
 
         case EventType::event_stop_thread:
         {
+            std::cout << "Stopping Realsense pipeline " << std::endl;
             pipe.stop();
+            std::cout << "Stopped Realsense pipeline " << std::endl;
             break;
         }
 
@@ -168,56 +229,6 @@ namespace Jetracer
             break;
         }
         }
-    }
-
-    rs2_stream find_stream_to_align(const std::vector<rs2::stream_profile> &streams)
-    {
-        //Given a vector of streams, we try to find a depth stream and another stream to align depth with.
-        //We prioritize color streams to make the view look better.
-        //If color is not available, we take another stream that (other than depth)
-        rs2_stream align_to = RS2_STREAM_ANY;
-        bool depth_stream_found = false;
-        bool color_stream_found = false;
-        for (rs2::stream_profile sp : streams)
-        {
-            rs2_stream profile_stream = sp.stream_type();
-            if (profile_stream != RS2_STREAM_DEPTH)
-            {
-                if (!color_stream_found) //Prefer color
-                    align_to = profile_stream;
-
-                if (profile_stream == RS2_STREAM_COLOR)
-                {
-                    color_stream_found = true;
-                }
-            }
-            else
-            {
-                depth_stream_found = true;
-            }
-        }
-
-        if (!depth_stream_found)
-            throw std::runtime_error("No Depth stream available");
-
-        if (align_to == RS2_STREAM_ANY)
-            throw std::runtime_error("No stream found to align with Depth");
-
-        return align_to;
-    }
-
-    bool profile_changed(const std::vector<rs2::stream_profile> &current, const std::vector<rs2::stream_profile> &prev)
-    {
-        for (auto &&sp : prev)
-        {
-            //If previous profile is in current (maybe just added another)
-            auto itr = std::find_if(std::begin(current), std::end(current), [&sp](const rs2::stream_profile &current_sp) { return sp.unique_id() == current_sp.unique_id(); });
-            if (itr == std::end(current)) //If it previous stream wasn't found in current
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
 } // namespace Jetracer

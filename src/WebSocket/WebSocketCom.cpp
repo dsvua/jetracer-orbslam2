@@ -6,7 +6,11 @@
 #include <chrono>
 #include <iostream>
 
+#include <chrono>
+using namespace std::chrono;
+
 #include "../RealSense/RealSenseD400.h"
+#include "../SlamGpuPipeline/SlamGpuPipeline.h"
 
 // using namespace std;
 
@@ -19,10 +23,15 @@ namespace Jetracer
             return true;
         };
 
+        _ctx->subscribeForEvent(EventType::event_stop_thread, threadName, pushEventCallback);
         // _ctx->subscribeForEvent(EventType::event_ping, threadName, pushEventCallback);
         // _ctx->subscribeForEvent(EventType::event_pong, threadName, pushEventCallback);
+        // _ctx->subscribeForEvent(EventType::event_realsense_D400_rgbd, threadName, pushEventCallback);
+        _ctx->subscribeForEvent(EventType::event_gpu_slam_frame, threadName, pushEventCallback);
 
         CommunicationThread = new std::thread(&WebSocketCom::Communication, this);
+        // detector = cv::cuda::ORB::create(512);
+        // detector = cv::cuda::ORB::create(50000, 1.2f, 8, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 1);
 
         std::cout << "WebSocket is initialized" << std::endl;
     }
@@ -87,11 +96,10 @@ namespace Jetracer
             return true;
         };
 
-        _ctx->subscribeForEvent(EventType::event_realsense_D400_rgbd, THREAD_NAME, pushEventCallback);
-
         using websocketpp::lib::bind;
         using websocketpp::lib::placeholders::_1;
         using websocketpp::lib::placeholders::_2;
+        m_endpoint.set_reuse_addr(true);
         m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
         m_endpoint.set_message_handler(bind(&WebSocketCom::on_message, this, _1, _2));
         m_endpoint.set_open_handler(bind(&WebSocketCom::on_open, this, _1));
@@ -123,6 +131,7 @@ namespace Jetracer
 
     void WebSocketCom::handleEvent(pEvent event)
     {
+        // std::cout << "WebSocketCom::handleEvent Got event of type " << event->event_type << std::endl;
 
         switch (event->event_type)
         {
@@ -137,31 +146,63 @@ namespace Jetracer
             break;
         }
 
-        case EventType::event_realsense_D400_rgbd:
+        case EventType::event_gpu_slam_frame:
         {
-            std::shared_ptr<rgbd_frame_t> rgbd_frame = std::static_pointer_cast<rgbd_frame_t>(event->message);
-            std::size_t image_size = _ctx->cam_w * _ctx->cam_w;
-            const char *char_data = static_cast<const char *>(rgbd_frame->lefr_ir);
-            std::basic_string_view view_data(char_data, image_size);
+            auto entrance = high_resolution_clock::now();
+
+            std::shared_ptr<slam_frame_t> slam_frame = std::static_pointer_cast<slam_frame_t>(event->message);
+            std::shared_ptr<rgbd_frame_t> rgbd_frame = slam_frame->rgbd_frame;
+            std::size_t image_size = _ctx->cam_w * _ctx->cam_h;
+            std::basic_string_view view_data(slam_frame->image.data, image_size);
+
+            auto start = high_resolution_clock::now();
+
+            std::basic_string_view view_data_x((unsigned char *)slam_frame->keypoints_x.get(),
+                                               slam_frame->keypoints_count * sizeof(uint16_t));
+            std::basic_string_view view_data_y((unsigned char *)slam_frame->keypoints_y.get(),
+                                               slam_frame->keypoints_count * sizeof(uint16_t));
 
             // std::cout << "Creating bson message" << std::endl;
             std::vector<uint8_t> buffer;
             jsoncons::bson::bson_bytes_encoder encoder(buffer);
             encoder.begin_object();
 
-            encoder.key("timestamp");
-            encoder.double_value(rgbd_frame->timestamp);
+            // encoder.key("timestamp");
+            // encoder.double_value(slam_frame->rgbd_frame->timestamp);
             encoder.key("width");
             encoder.uint64_value(_ctx->cam_w);
             encoder.key("height");
             encoder.uint64_value(_ctx->cam_h);
             encoder.key("channels");
             encoder.uint64_value(1);
+            encoder.key("keypoints_x");
+            encoder.byte_string_value(view_data_x);
+            encoder.key("keypoints_y");
+            encoder.byte_string_value(view_data_y);
             encoder.key("image");
             encoder.byte_string_value(view_data);
 
             encoder.end_object();
             encoder.flush();
+            auto stop = high_resolution_clock::now();
+            auto duration = duration_cast<milliseconds>(stop - start);
+
+            // std::cout << "total number of keypoints: " << slam_frame->keypoints.size()
+            //           << " frame_id " << slam_frame->rgbd_frame->original_frame.get_frame_number()
+            //           << " BSON creation time " << duration.count() << "ms"
+            //           << " image_size " << image_size
+            //   << " view_data_x.length() " << view_data_x.length()
+            //   << " view_keypoints_x.size() " << view_keypoints_x.size()
+            //   << " sizeof(float) " << sizeof(float)
+            //   << " Camera->GPU " << duration_cast<milliseconds>(rgbd_frame->GPU_scheduled - rgbd_frame->RS400_callback).count()
+            //   << " GPU -> callback " << duration_cast<milliseconds>(rgbd_frame->GPU_callback - rgbd_frame->GPU_scheduled).count()
+            //   << " callback -> Websoc Ent " << duration_cast<milliseconds>(entrance - rgbd_frame->GPU_callback).count()
+            //   << " callback -> callback Event " << duration_cast<milliseconds>(rgbd_frame->GPU_EventSent - rgbd_frame->GPU_callback).count()
+            //   << " callback Event -> Websoc Ent " << duration_cast<milliseconds>(entrance - rgbd_frame->GPU_EventSent).count()
+            //   << " Camera -> Websoc Ent " << duration_cast<milliseconds>(entrance - rgbd_frame->GPU_scheduled).count()
+            //   << std::endl;
+
+            // std::cout << duration.count() << std::endl;
 
             con_list::iterator it;
             for (it = m_connections.begin(); it != m_connections.end(); ++it)

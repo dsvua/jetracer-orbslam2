@@ -36,7 +36,8 @@ namespace Jetracer
         if (!m_thread)
             return;
 
-        // Create a new ThreadMsg
+        quit_thread = true;
+
         pEvent event = std::make_shared<BaseEvent>();
         event->event_type = EventType::event_stop_thread;
 
@@ -79,37 +80,32 @@ namespace Jetracer
 
     void EventsThread::process()
     {
-        while (1)
+        while (!quit_thread)
         {
-            pEvent event;
-            {
-                // Wait for a message to be added to the queue
-                std::unique_lock<std::mutex> lk(m_mutex);
-                while (m_queue.empty())
-                    m_cv.wait(lk);
+            // Wait for a message to be added to the queue
+            std::unique_lock<std::mutex> lk(m_mutex);
+            while (m_queue.empty())
+                m_cv.wait(lk);
 
-                if (m_queue.empty())
-                    continue;
+            if (m_queue.empty())
+                continue;
 
-                event = m_queue.front();
-                m_queue.pop();
-                m_mutex.unlock();
-            }
+            pEvent event = m_queue.front();
+            m_queue.pop();
 
-            // std::cout << "Got event " << event->event_type << " in " << THREAD_NAME << std::endl;
             handleEvent(event);
 
             switch (event->event_type)
             {
             case EventType::event_stop_thread:
             {
-                // std::cout << "Got event event_stop_thread in " << THREAD_NAME << std::endl;
-                std::unique_lock<std::mutex> lk(m_mutex);
+                quit_thread = true;
                 while (!m_queue.empty())
                 {
                     event = m_queue.front();
                     m_queue.pop();
                 }
+                std::cout << "Exited process for thread " << THREAD_NAME << std::endl;
                 return;
             }
 

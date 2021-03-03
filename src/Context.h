@@ -15,12 +15,23 @@ namespace Jetracer
     {
         int cam_w = 848;
         int cam_h = 480;
-        int fps = 90;
+        int fps = 60; // depth and color realsense streams must support fps for "cam_w x cam_w" resolution
         int PingPong_max_queue_legth = 1;
+        int RealSenseD400_autoexposure_settle_frame = 100;
         int RealSenseD400_max_queue_legth = 3;
         int SaveRawData_max_queue_legth = 1;
-        int WebSocketCom_max_queue_legth = 2;
-        int SlamGpuPipeline_max_queue_legth = 2;
+        int WebSocketCom_max_queue_legth = 1;
+        int SlamGpuPipeline_max_queue_length = 2;
+        int SlamGpuPipeline_max_streams_length = 1;
+        int SlamGpuPipeline_max_keypoints = 1024;
+        int SlamGpuPipeline_max_keypoints_to_search = 5120;
+
+        // Fast keypoints
+        int pyramid_levels = 1;
+
+        // CUDA
+        int CUDA_THREADS_PER_BLOCK = 32;
+
         // int max_queue_legth = 10;
         int frames_to_skip = 30; // discard all frames until start_frame to
                                  // give autoexposure, etc. a chance to settle

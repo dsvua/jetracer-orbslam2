@@ -1,6 +1,10 @@
-FROM nvidia/cuda:10.2-cudnn8-devel-ubuntu18.04
+FROM nvidia/cuda:11.2.1-cudnn8-devel-ubuntu20.04
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     libglvnd0 \
     libgl1 \
     libglx0 \
@@ -18,23 +22,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget vim \
     libgl1-mesa-dev libglew-dev \
     git \
-    cuda-nsight-systems-10-2 cuda-nsight-compute-10-2 cuda-visual-tools-10-2 && \
+    lsof \
+    valgrind \
+    software-properties-common && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
+
+# cuda-nsight-systems-11-2 cuda-nsight-compute-11-2 cuda-visual-tools-11-2 && \
 
 # Installing CMAKE library
 
-RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.18.2/cmake-3.18.2-Linux-x86_64.sh && \
-    chmod +x cmake-3.18.2-Linux-x86_64.sh; ./cmake-3.18.2-Linux-x86_64.sh --skip-license && \
-    rm -rf cmake-3.18.2-Linux-x86_64.sh
+RUN apt remove --purge --auto-remove cmake && \
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null && \
+    apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal-rc main' && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cmake && \
+    rm -rf /var/lib/apt/lists/*
 
 # Installing Realsense library
 
 RUN git clone https://github.com/IntelRealSense/librealsense.git && \
     echo `pwd` && ls &&\
-    cd librealsense && ls &&\
-    mkdir build &&\
+    cd librealsense && \
+    git checkout v2.42.0 && \
+    mkdir build && \
     cd build && \
-    cmake ../ -D FORCE_RSUSB_BACKEND=true \
+    cmake ../ \
+    -D FORCE_RSUSB_BACKEND=true \
     -D CMAKE_BUILD_TYPE=release \
     -D BUILD_EXAMPLES=true \
     -D OpenGL_GL_PREFERENCE=GLVND \
@@ -42,7 +56,7 @@ RUN git clone https://github.com/IntelRealSense/librealsense.git && \
     -D BUILD_WITH_CUDA=true && \
     make -j$(nproc) && \
     make install && \
-    cd ../../ && rm -rf librealsense cmake-3.18.2-Linux-x86_64.sh
+    cd ../../ && rm -rf librealsense
 
 
 # Installing OpenCV
@@ -119,14 +133,22 @@ RUN cd $HOME && \
     ldconfig
 # make package -j$NUM_JOBS && \
 
+# installing Cuda samples
+RUN cd $HOME && wget -q https://github.com/NVIDIA/cuda-samples/archive/v10.2.tar.gz && \
+    tar -xzvf v10.2.tar.gz && \
+    mv cuda-samples-10.2 cuda-samples && \
+    rm -rf v10.2.tar.gz
+
+RUN cd $HOME && git clone https://github.com/uzh-rpg/vilib.git vilib && \
+    cd vilib && mkdir build && cd build && \
+    cmake cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .. && \
+    make install -j$(nproc) && \
+    ldconfig
 
 
 #RUN cd librealsense; cp config/99-realsense-libusb.rules /etc/udev/rules.d/
-
 # RUN cd librealsense; mkdir build
-
 # RUN cd librealsense/build; cmake ../ -DFORCE_LIBUVC=true -DCMAKE_BUILD_TYPE=release -DBUILD_EXAMPLES=true -DBUILD_WITH_CUDA=true
-
 # RUN cd librealsense/build; make -j`grep -c ^processor /proc/cpuinfo` && make install
 
 # Env vars for the nvidia-container-runtime.
