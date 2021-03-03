@@ -40,7 +40,7 @@ find_library(WEBSOCKETPP_LIBRARY websocketpp)
 
 find_package( OpenCV 4.5.1 REQUIRED )
 find_package(realsense2 2.29.0 REQUIRED)
-find_package(vilib REQUIRED)
+# find_package(vilib REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 # ---[ Use the default installation path if not set.
