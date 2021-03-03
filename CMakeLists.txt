@@ -15,7 +15,7 @@ endif()
 
 # cannot get it to work
 # if(NOT DEFINED ${CMAKE_CUDA_ARCHITECTURES})
-    set(CMAKE_CUDA_ARCHITECTURES 52)
+    set(CMAKE_CUDA_ARCHITECTURES 52 72)
 # endif()
 message(STATUS "CUDA architectures set to ${CMAKE_CUDA_ARCHITECTURES}")
 

@@ -78,7 +78,6 @@ ENV CMAKE_INSTALL_PREFIX=$INSTALL_DIR
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
-    cmake \
     libavcodec-dev \
     libavformat-dev \
     libavutil-dev \
