@@ -5,14 +5,6 @@
 
 namespace Jetracer
 {
-#ifndef FULL_MASK
-#define FULL_MASK 0xffffffff
-#endif
-
-#ifndef CUDART_PI_F
-#define CUDART_PI_F 3.141592654f
-#endif
-
     void compute_fast_angle(float *d_keypoints_angle,
                             float2 *d_keypoints_pos,
                             unsigned char *image,

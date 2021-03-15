@@ -1,9 +1,12 @@
 FROM nvidia/cuda:11.2.1-cudnn8-devel-ubuntu20.04
+# FROM nvidia/cuda-arm64:10.2-cudnn8-devel-ubuntu18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
     apt-get update && \
+    apt-get install -y --no-install-recommends tzdata && \
+    dpkg-reconfigure --frontend noninteractive tzdata && \
     apt-get install -y --no-install-recommends \
     libglvnd0 \
     libgl1 \
@@ -23,9 +26,8 @@ RUN ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
     libgl1-mesa-dev libglew-dev \
     git \
     lsof \
-    valgrind \
-    software-properties-common && \
-    dpkg-reconfigure --frontend noninteractive tzdata && \
+    software-properties-common \
+    valgrind && \
     rm -rf /var/lib/apt/lists/*
 
 # cuda-nsight-systems-11-2 cuda-nsight-compute-11-2 cuda-visual-tools-11-2 && \
@@ -34,7 +36,7 @@ RUN ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
 
 RUN apt remove --purge --auto-remove cmake && \
     wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null && \
-    apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal-rc main' && \
+    apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main' && \
     apt-get update && \
     apt-get install -y --no-install-recommends cmake && \
     rm -rf /var/lib/apt/lists/*
@@ -138,11 +140,11 @@ RUN cd $HOME && wget -q https://github.com/NVIDIA/cuda-samples/archive/v10.2.tar
     mv cuda-samples-10.2 cuda-samples && \
     rm -rf v10.2.tar.gz
 
-RUN cd $HOME && git clone https://github.com/uzh-rpg/vilib.git vilib && \
-    cd vilib && mkdir build && cd build && \
-    cmake cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .. && \
-    make install -j$(nproc) && \
-    ldconfig
+# RUN cd $HOME && git clone https://github.com/uzh-rpg/vilib.git vilib && \
+#     cd vilib && mkdir build && cd build && \
+#     cmake cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .. && \
+#     make install -j$(nproc) && \
+#     ldconfig
 
 
 #RUN cd librealsense; cp config/99-realsense-libusb.rules /etc/udev/rules.d/

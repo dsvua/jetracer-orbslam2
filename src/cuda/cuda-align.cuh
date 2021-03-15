@@ -23,13 +23,24 @@ __global__ void kernel_map_depth_to_other(int2 *mapped_pixels,
                                           const rs2_extrinsics *depth_to_other,
                                           float depth_scale);
 
-__global__ void kernel_depth_to_other(uint16_t *aligned_out,
+__global__ void kernel_depth_to_other(unsigned int *aligned_out,
                                       const uint16_t *depth_in,
                                       const int2 *mapped_pixels,
                                       const rs2_intrinsics *depth_intrin,
                                       const rs2_intrinsics *other_intrin);
 
-__global__ void kernel_replace_to_zero(uint16_t *aligned_out,
-                                       const rs2_intrinsics *other_intrin);
+__global__ void kernel_reset_to_zero(unsigned int *aligned_out,
+                                     const rs2_intrinsics *other_intrin);
+
+void align_depth_to_other(unsigned int *d_aligned_out,
+                          const uint16_t *d_depth_in,
+                          int2 *d_pixel_map,
+                          float depth_scale,
+                          int image_width,
+                          int image_height,
+                          const rs2_intrinsics *d_depth_intrin,
+                          const rs2_intrinsics *d_other_intrin,
+                          const rs2_extrinsics *d_depth_to_other,
+                          cudaStream_t stream);
 
 #endif // JETRACER_CUDA_ALIGN_UTILS_H

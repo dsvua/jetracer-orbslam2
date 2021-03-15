@@ -17,10 +17,11 @@ namespace Jetracer
         int cam_h = 480;
         int fps = 60; // depth and color realsense streams must support fps for "cam_w x cam_w" resolution
         int PingPong_max_queue_legth = 1;
-        int RealSenseD400_autoexposure_settle_frame = 100;
+        int RealSenseD400_autoexposure_settle_frame = 20;
         int RealSenseD400_max_queue_legth = 3;
         int SaveRawData_max_queue_legth = 1;
         int WebSocketCom_max_queue_legth = 1;
+        float WebSocketCom_max_send_rate = 10.0f * 1024 * 1024; // ~5Mb/s
         int SlamGpuPipeline_max_queue_length = 2;
         int SlamGpuPipeline_max_streams_length = 1;
         int SlamGpuPipeline_max_keypoints = 1024;

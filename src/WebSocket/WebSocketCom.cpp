@@ -11,6 +11,7 @@ using namespace std::chrono;
 
 #include "../RealSense/RealSenseD400.h"
 #include "../SlamGpuPipeline/SlamGpuPipeline.h"
+#include "bson.h"
 
 // using namespace std;
 
@@ -24,15 +25,10 @@ namespace Jetracer
         };
 
         _ctx->subscribeForEvent(EventType::event_stop_thread, threadName, pushEventCallback);
-        // _ctx->subscribeForEvent(EventType::event_ping, threadName, pushEventCallback);
-        // _ctx->subscribeForEvent(EventType::event_pong, threadName, pushEventCallback);
-        // _ctx->subscribeForEvent(EventType::event_realsense_D400_rgbd, threadName, pushEventCallback);
         _ctx->subscribeForEvent(EventType::event_gpu_slam_frame, threadName, pushEventCallback);
 
         CommunicationThread = new std::thread(&WebSocketCom::Communication, this);
-        // detector = cv::cuda::ORB::create(512);
-        // detector = cv::cuda::ORB::create(50000, 1.2f, 8, 31, 0, 2, cv::ORB::HARRIS_SCORE, 31, 1);
-
+        current_send_quota = _ctx->WebSocketCom_max_send_rate;
         std::cout << "WebSocket is initialized" << std::endl;
     }
 
@@ -52,12 +48,8 @@ namespace Jetracer
 
         case websocketpp::frame::opcode::binary:
         {
-            // std::string message = msg->get_payload();
-            // std::vector<uint8_t> buffer = message.data();
-            // auto tt = message.data();
             std::cout << "Binary message received:" << std::endl;
             auto j = jsoncons::bson::decode_bson<jsoncons::ojson>(msg->get_payload());
-            // std::cout << jsoncons::pretty_print(j) << std::endl;
             break;
         }
 
@@ -150,40 +142,44 @@ namespace Jetracer
         {
             auto entrance = high_resolution_clock::now();
 
+            // std::cout << "--------> WebSocketCom -----" << std::endl;
             std::shared_ptr<slam_frame_t> slam_frame = std::static_pointer_cast<slam_frame_t>(event->message);
             std::shared_ptr<rgbd_frame_t> rgbd_frame = slam_frame->rgbd_frame;
-            std::size_t image_size = _ctx->cam_w * _ctx->cam_h;
-            std::basic_string_view view_data(slam_frame->image.data, image_size);
+            std::size_t image_size = _ctx->cam_w * _ctx->cam_h * sizeof(char);
 
             auto start = high_resolution_clock::now();
 
-            std::basic_string_view view_data_x((unsigned char *)slam_frame->keypoints_x.get(),
-                                               slam_frame->keypoints_count * sizeof(uint16_t));
-            std::basic_string_view view_data_y((unsigned char *)slam_frame->keypoints_y.get(),
-                                               slam_frame->keypoints_count * sizeof(uint16_t));
+            auto time_delta = duration_cast<milliseconds>(start - prev_sent_time);
+            prev_sent_time = start;
 
-            // std::cout << "Creating bson message" << std::endl;
-            std::vector<uint8_t> buffer;
-            jsoncons::bson::bson_bytes_encoder encoder(buffer);
-            encoder.begin_object();
+            current_send_quota += _ctx->WebSocketCom_max_send_rate / 1000.0f * time_delta.count();
+            if (current_send_quota > _ctx->WebSocketCom_max_send_rate)
+                current_send_quota = _ctx->WebSocketCom_max_send_rate;
+            // std::cout << "time_delta: " << time_delta.count() << std::endl;
 
-            // encoder.key("timestamp");
-            // encoder.double_value(slam_frame->rgbd_frame->timestamp);
-            encoder.key("width");
-            encoder.uint64_value(_ctx->cam_w);
-            encoder.key("height");
-            encoder.uint64_value(_ctx->cam_h);
-            encoder.key("channels");
-            encoder.uint64_value(1);
-            encoder.key("keypoints_x");
-            encoder.byte_string_value(view_data_x);
-            encoder.key("keypoints_y");
-            encoder.byte_string_value(view_data_y);
-            encoder.key("image");
-            encoder.byte_string_value(view_data);
+            Bson bson_message;
+            // std::cout << "--------> bson_message.add -----" << std::endl;
+            int channels = 1;
+            bson_message.add("width", bson_value_type::bson_int32, &_ctx->cam_w);
+            bson_message.add("height", bson_value_type::bson_int32, &_ctx->cam_h);
+            bson_message.add("channels", bson_value_type::bson_int32, &channels);
+            bson_message.add("keypoints_x",
+                             bson_value_type::bson_binary,
+                             slam_frame->keypoints_x.get(),
+                             slam_frame->keypoints_count * sizeof(uint16_t));
+            bson_message.add("keypoints_y",
+                             bson_value_type::bson_binary,
+                             slam_frame->keypoints_y.get(),
+                             slam_frame->keypoints_count * sizeof(uint16_t));
+            bson_message.add("image",
+                             bson_value_type::bson_binary,
+                             slam_frame->image,
+                             image_size);
 
-            encoder.end_object();
-            encoder.flush();
+            // std::cout << "--------> bson_message.process -----" << std::endl;
+            bson_message.process();
+            // std::cout << "--------> bson_message.process - done -----" << std::endl;
+
             auto stop = high_resolution_clock::now();
             auto duration = duration_cast<milliseconds>(stop - start);
 
@@ -204,26 +200,37 @@ namespace Jetracer
 
             // std::cout << duration.count() << std::endl;
 
-            con_list::iterator it;
-            for (it = m_connections.begin(); it != m_connections.end(); ++it)
+            // con_list::iterator it;
+            // std::cout << "bson_message.size() " << bson_message.size()
+            //           << " current_send_quota " << current_send_quota
+            //           << std::endl;
+            if (bson_message.size() < current_send_quota)
             {
-                // std::cout << "Sending bson message" << std::endl;
-                auto con = m_endpoint.get_con_from_hdl(*it);
-                if (con->get_buffered_amount() < _ctx->cam_w * _ctx->cam_h * _ctx->WebSocketCom_max_queue_legth)
+                current_send_quota -= bson_message.size();
+                // if (current_send_quota < 0)
+                //     current_send_quota = 0;
+
+                for (con_list::iterator it = m_connections.begin(); it != m_connections.end(); ++it)
                 {
-                    try
+                    // std::cout << "Sending bson message" << std::endl;
+                    auto con = m_endpoint.get_con_from_hdl(*it);
+                    if (con->get_buffered_amount() < _ctx->cam_w * _ctx->cam_h * _ctx->WebSocketCom_max_queue_legth)
                     {
-                        m_endpoint.send(*it, buffer.data(), buffer.size(), websocketpp::frame::opcode::binary);
-                        // std::cout << "Bson message is sent" << std::endl;
+                        try
+                        {
+                            m_endpoint.send(*it, bson_message.ptr(), bson_message.size(), websocketpp::frame::opcode::binary);
+                            // m_endpoint.send(*it, buffer.data(), buffer.size(), websocketpp::frame::opcode::binary);
+                            std::cout << "Bson message is sent" << std::endl;
+                        }
+                        catch (websocketpp::exception const &e)
+                        {
+                            std::cout << e.what() << std::endl;
+                        }
                     }
-                    catch (websocketpp::exception const &e)
+                    else
                     {
-                        std::cout << e.what() << std::endl;
+                        std::cout << "Cannot send, buffer is " << con->get_buffered_amount() << std::endl;
                     }
-                }
-                else
-                {
-                    std::cout << "Cannot send, buffer is " << con->get_buffered_amount() << std::endl;
                 }
             }
             break;
@@ -235,6 +242,12 @@ namespace Jetracer
             break;
         }
         }
+    }
+
+    Bson::~Bson()
+    {
+        if (buffer_)
+            delete buffer_;
     }
 
 } // namespace Jetracer

@@ -11,8 +11,6 @@
 #include <atomic>
 #include <thread>
 #include <set>
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/cudafeatures2d.hpp>
 
 #define ASIO_STANDALONE
 #include <websocketpp/config/asio_no_tls.hpp>
@@ -44,6 +42,9 @@ namespace Jetracer
         std::mutex m_mutex_subscribers;
         server m_endpoint;
         con_list m_connections;
+        float current_send_quota; // used for send rate limiting
+        std::chrono::_V2::system_clock::time_point prev_sent_time;
+
         // cv::Ptr<cv::cuda::ORB> detector;
 
         std::thread *CommunicationThread;

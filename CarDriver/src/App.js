@@ -35,11 +35,7 @@ const App = () => {
             <VideoFeed />        
           {/* </div> */}
         </div>
-        {/* <div className="row align-items-end w-100">
-          <div className="col"> */}
-            <WsConnection />        
-          {/* </div>
-        </div> */}
+        <WsConnection />        
       </div>
   );
 }

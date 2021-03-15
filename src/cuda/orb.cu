@@ -10,7 +10,7 @@ namespace Jetracer
     __constant__ unsigned char c_pattern[sizeof(int2) * 512];
 
 #define GET_VALUE(idx)                                                     \
-    image[(loc.y + __float2int_rn(pattern[idx].x * b + pattern[idx].y * a)) * image_pitch, \
+    image[(loc.y + __float2int_rn(pattern[idx].x * b + pattern[idx].y * a)) * image_pitch + \
           loc.x + __float2int_rn(pattern[idx].x * a - pattern[idx].y * b)]
 
     // __global__ void calcOrb_kernel(const PtrStepb image, float2 *d_keypoints_pos, const int npoints, PtrStepb descriptors)
@@ -179,7 +179,7 @@ namespace Jetracer
                                                           image_width,
                                                           image_height,
                                                           keypoints_num);
-        CUDA_KERNEL_CHECK();
+        // CUDA_KERNEL_CHECK();
     }
 
     void loadPattern()

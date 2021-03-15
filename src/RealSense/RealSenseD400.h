@@ -11,7 +11,6 @@
 #include <atomic>
 #include <thread>
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
-#include <opencv2/core/cuda.hpp>
 #include <chrono>
 
 namespace Jetracer
@@ -37,8 +36,6 @@ namespace Jetracer
 
     typedef struct rgbd_frame
     {
-        // cv::cuda::GpuMat d_depth_image;
-        // cv::cuda::GpuMat d_rgb_image;
         rs2::depth_frame depth_frame = rs2::frame{};
         rs2::video_frame rgb_frame = rs2::frame{};
 
@@ -55,12 +52,6 @@ namespace Jetracer
         std::chrono::_V2::system_clock::time_point GPU_scheduled;
         std::chrono::_V2::system_clock::time_point GPU_callback;
         std::chrono::_V2::system_clock::time_point GPU_EventSent;
-
-        ~rgbd_frame()
-        {
-            // d_depth_image.~GpuMat();
-            // d_rgb_image.~GpuMat();
-        }
 
     } rgbd_frame_t;
 

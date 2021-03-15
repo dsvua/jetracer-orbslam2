@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import { connectionStateIsConnected, connectionStateWs } from '../state/network'
 import { videoImage, videoImageParams } from '../state/video'
-import { slamKeypoints } from '../state/slam'
 import BSON from 'bson';
 
 export const useWebsocket = () => {
@@ -10,7 +9,6 @@ export const useWebsocket = () => {
     const setIsConnected = useSetRecoilState(connectionStateIsConnected);
     const setVideoImageParams = useSetRecoilState(videoImageParams);
     const setNewVideoImage = useSetRecoilState(videoImage);
-    const setNewSlamKeyPoints = useSetRecoilState(slamKeypoints);
     const [ws, setWs] = useRecoilState(connectionStateWs);
 
     useEffect( () => {
@@ -50,7 +48,6 @@ export const useWebsocket = () => {
                     setVideoImageParams(imageParams);
                     // setNewSlamKeyPoints({x: msg.keypoints_x.buffer, y: msg.keypoints_y.buffer})
                 };
-        
                 try {
                     reader.readAsArrayBuffer(message.data);
                 }

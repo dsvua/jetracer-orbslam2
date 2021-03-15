@@ -11,13 +11,8 @@
 #include <atomic>
 #include <thread>
 
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/core/cuda_stream_accessor.hpp>
-#include <opencv2/cudafeatures2d.hpp>
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
-// #include <cuda/Cuda.hpp>
-// #include "../external/vilib/feature_detection/detector_base_gpu.h"
 
 #include "../RealSense/RealSenseD400.h"
 
@@ -30,16 +25,8 @@
 
 namespace Jetracer
 {
-    using namespace cv;
-    using namespace cv::cuda;
 
 #pragma once
-    // enum fast_score
-    // {
-    //     SUM_OF_ABS_DIFF_ALL = 0, // OpenCV: https://docs.opencv.org/master/df/d0c/tutorial_py_fast.html
-    //     SUM_OF_ABS_DIFF_ON_ARC,  // Rosten 2006
-    //     MAX_THRESHOLD            // Rosten 2008
-    // };
 
     typedef struct slam_frame_callback
     {
@@ -53,14 +40,7 @@ namespace Jetracer
 
     typedef struct slam_frame
     {
-        cv::cuda::GpuMat d_keypoints;
-        cv::cuda::GpuMat d_descriptors;
-        // cv::cuda::GpuMat d_matches;
-
-        cv::Mat descriptors;
-        cv::Mat image;
-        std::vector<cv::DMatch> feature_matches;
-        // std::shared_ptr<std::vector<vilib::DetectorBase<true>::FeaturePoint>> keypoints;
+        unsigned char *image;
         std::shared_ptr<uint16_t[]> keypoints_x;
         std::shared_ptr<uint16_t[]> keypoints_y;
         int keypoints_count;
@@ -99,9 +79,9 @@ namespace Jetracer
         std::mutex m_gpu_mutex;
 
         float depth_scale;
-        std::shared_ptr<rs2_intrinsics> _d_rgb_intrinsics;
-        std::shared_ptr<rs2_intrinsics> _d_depth_intrinsics;
-        std::shared_ptr<rs2_extrinsics> _d_depth_rgb_extrinsics;
+        rs2_intrinsics *_d_rgb_intrinsics;
+        rs2_intrinsics *_d_depth_intrinsics;
+        rs2_extrinsics *_d_depth_rgb_extrinsics;
 
         int frame_counter = 0;
     };

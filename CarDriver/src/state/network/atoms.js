@@ -14,4 +14,3 @@ export const connectionStateUrl = atom({
     key: 'connection-state-url-atom',
     default: 'ws://localhost:9002',
 });
-

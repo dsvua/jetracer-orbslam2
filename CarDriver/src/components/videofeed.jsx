@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useRecoilState } from 'recoil';
 import { videoImage, videoImageParams } from "../state/video";
 import { connectionStateIsConnected } from '../state/network'
 // import { slamKeypoints } from '../state/slam'
@@ -24,13 +24,6 @@ export const VideoFeed = (props) => {
         context.fillRect(0, 0, context.canvas.width, context.canvas.height);
     }, []);
     
-    const paint_circle = (ctx, x, y) => {
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, 360);
-        ctx.fillStyle = "green";
-        ctx.fill();
-    }
-
     useEffect(() => {
 
         if (isConnected){

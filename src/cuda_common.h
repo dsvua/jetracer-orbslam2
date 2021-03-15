@@ -32,11 +32,24 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// #pragma once
+#pragma once
 
 #include <assert.h>
 #include <iostream>
 #include <cuda_runtime_api.h>
+#include <helper_cuda.h>
+
+#ifndef FULL_MASK
+#define FULL_MASK 0xffffffff
+#endif
+
+#ifndef CUDART_PI_F
+#define CUDART_PI_F 3.141592654f
+#endif
+
+#ifndef CUDA_WARP_SIZE
+#define CUDA_WARP_SIZE 32
+#endif
 
 namespace Jetracer
 {

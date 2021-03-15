@@ -13,10 +13,7 @@ endif()
 
 # set(CMAKE_VERBOSE_MAKEFILE ON)
 
-# cannot get it to work
-# if(NOT DEFINED ${CMAKE_CUDA_ARCHITECTURES})
-    set(CMAKE_CUDA_ARCHITECTURES 52 72)
-# endif()
+set(CMAKE_CUDA_ARCHITECTURES 52)
 message(STATUS "CUDA architectures set to ${CMAKE_CUDA_ARCHITECTURES}")
 
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -rdc=true")
@@ -38,10 +35,8 @@ find_library(WEBSOCKETPP_LIBRARY websocketpp)
 # find_library(NPPC_LIBRARY nppc ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 # find_library(CULIBOS culibos ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 
-find_package( OpenCV 4.5.1 REQUIRED )
 find_package(realsense2 2.29.0 REQUIRED)
-# find_package(vilib REQUIRED)
-find_package(Eigen3 REQUIRED)
+# find_package(Eigen3 REQUIRED)
 
 # ---[ Use the default installation path if not set.
 IF(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)

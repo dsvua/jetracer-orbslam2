@@ -1,15 +1,13 @@
 // Frame preprocessing
-#define PYRAMID_LEVELS 1
+#define PYRAMID_LEVELS 3
 #define PYRAMID_MIN_LEVEL 0
 #define PYRAMID_MAX_LEVEL PYRAMID_LEVELS
-#define SLAM_IMAGE_PYRAMID_MEMORY_TYPE vilib::Subframe::MemoryType::PITCHED_DEVICE_MEMORY
 
 // FAST detector parameters
 #define FAST_EPSILON (10.0f)
 #define FAST_MIN_ARC_LENGTH 10
 // Remark: the Rosten CPU version only works with
 //         SUM_OF_ABS_DIFF_ON_ARC and MAX_THRESHOLD
-#define FAST_SCORE vilib::fast_score::SUM_OF_ABS_DIFF_ON_ARC
 
 // NMS parameters
 #define HORIZONTAL_BORDER 0

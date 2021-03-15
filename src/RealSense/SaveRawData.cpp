@@ -9,7 +9,6 @@
 #include <cstring> // for memcpy
 
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
-#include <opencv2/core/cuda.hpp>
 // #include <nvjpeg.h>
 
 // using namespace std;

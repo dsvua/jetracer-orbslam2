@@ -4,17 +4,19 @@
 #include <chrono>
 #include <iostream>
 #include <pthread.h>
-#include <opencv2/cudaimgproc.hpp>
-#include "../external/vilib/preprocess/pyramid.h"
-#include "../external/vilib/storage/pyramid_pool.h"
+// #include "../external/vilib/preprocess/pyramid.h"
+// #include "../external/vilib/storage/pyramid_pool.h"
 // #include "../external/vilib/feature_detection/fast/fast_common.h"
-#include "../external/vilib/feature_detection/fast/fast_gpu.h"
+// #include "../external/vilib/feature_detection/fast/fast_gpu.h"
 // #include "../external/vilib/config.h"
 // #include "vilib/common/subframe.h"
 
 #include "../cuda/rscuda_utils.cuh"
 #include "../cuda/cuda_RGB_to_Grayscale.cuh"
 #include "../cuda/orb.cuh"
+#include "../cuda/cuda-align.cuh"
+#include "../cuda/pyramid.cuh"
+#include "../cuda/fast.cuh"
 #include "defines.h"
 
 #include <unistd.h> // for sleep function
@@ -47,20 +49,36 @@ namespace Jetracer
         }
 
         loadPattern(); // loads ORB pattern to GPU
+        checkCudaErrors(cudaMalloc((void **)&_d_rgb_intrinsics, sizeof(rs2_intrinsics)));
+        checkCudaErrors(cudaMalloc((void **)&_d_depth_intrinsics, sizeof(rs2_intrinsics)));
+        checkCudaErrors(cudaMalloc((void **)&_d_depth_rgb_extrinsics, sizeof(rs2_extrinsics)));
 
         std::cout << "SlamGpuPipeline is initialized" << std::endl;
     }
 
     void SlamGpuPipeline::upload_intristics(std::shared_ptr<Jetracer::rgbd_frame_t> rgbd_frame)
     {
-        std::cout << "Uploading intinsics " << std::endl;
+        // std::cout << "Uploading intinsics " << std::endl;
 
         auto rgb_profile = rgbd_frame->rgb_frame.get_profile().as<rs2::video_stream_profile>();
         auto depth_profile = rgbd_frame->depth_frame.get_profile().as<rs2::video_stream_profile>();
 
-        _d_rgb_intrinsics = rscuda::make_device_copy(rgb_profile.get_intrinsics());
-        _d_depth_intrinsics = rscuda::make_device_copy(depth_profile.get_intrinsics());
-        _d_depth_rgb_extrinsics = rscuda::make_device_copy(depth_profile.get_extrinsics_to(rgb_profile));
+        rs2_intrinsics h_rgb_intrinsics = rgb_profile.get_intrinsics();
+        rs2_intrinsics h_depth_intrinsics = depth_profile.get_intrinsics();
+        rs2_extrinsics h_depth_rgb_extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
+
+        checkCudaErrors(cudaMemcpy((void *)_d_rgb_intrinsics,
+                                   &h_rgb_intrinsics,
+                                   sizeof(rs2_intrinsics),
+                                   cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy((void *)_d_depth_intrinsics,
+                                   &h_depth_intrinsics,
+                                   sizeof(rs2_intrinsics),
+                                   cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpy((void *)_d_depth_rgb_extrinsics,
+                                   &h_depth_rgb_extrinsics,
+                                   sizeof(rs2_extrinsics),
+                                   cudaMemcpyHostToDevice));
 
         depth_scale = rgbd_frame->depth_frame.get_units();
         intristics_are_known = true;
@@ -70,30 +88,40 @@ namespace Jetracer
     void SlamGpuPipeline::buildStream(int slam_frames_id)
     {
         // spread threads between cores
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        CPU_SET(slam_frames_id + 1, &cpuset);
+        // cpu_set_t cpuset;
+        // CPU_ZERO(&cpuset);
+        // CPU_SET(slam_frames_id + 1, &cpuset);
 
-        int rc = pthread_setaffinity_np(slam_frames[slam_frames_id]->gpu_thread.native_handle(),
-                                        sizeof(cpu_set_t), &cpuset);
-        if (rc != 0)
-        {
-            std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
-        }
+        // int rc = pthread_setaffinity_np(slam_frames[slam_frames_id]->gpu_thread.native_handle(),
+        //                                 sizeof(cpu_set_t), &cpuset);
+        // if (rc != 0)
+        // {
+        //     std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+        // }
+
+        std::cout
+            << "GPU thread " << slam_frames_id << " is started on CPU: "
+            << sched_getcpu() << std::endl;
 
         cudaStream_t stream;
-        cudaStream_t io_stream;
+        cudaStream_t align_stream;
+        // cudaStream_t io_stream;
         checkCudaErrors(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+        checkCudaErrors(cudaStreamCreateWithFlags(&align_stream, cudaStreamNonBlocking));
+        // checkCudaErrors(cudaStreamCreateWithFlags(&io_stream, cudaStreamNonBlocking));
 
         // allocate memory for image processing
         unsigned char *d_rgb_image;
         unsigned char *d_gray_image;
-        float *d_gray_keypoint_response;
-        bool *d_keypoints_exist;
-        float *d_keypoints_response;
+        unsigned int *d_aligned_out;
+        uint16_t *d_depth_in;
+        int2 *d_pixel_map;
+        // float *d_gray_keypoint_response;
+        // bool *d_keypoints_exist;
+        // float *d_keypoints_response;
         float *d_keypoints_angle;
-        float2 *d_keypoints_pos;
-        uchar *d_descriptors;
+        // float2 *d_keypoints_pos;
+        unsigned char *d_descriptors;
 
         int grid_cols = (_ctx->cam_w + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
         int grid_rows = (_ctx->cam_h + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
@@ -101,62 +129,79 @@ namespace Jetracer
 
         int data_bytes = _ctx->cam_w * _ctx->cam_h * 3;
         std::size_t width_char = sizeof(char) * _ctx->cam_w;
-        std::size_t width_float = sizeof(float) * _ctx->cam_w;
+        // std::size_t width_float = sizeof(float) * _ctx->cam_w;
         std::size_t height = _ctx->cam_h;
 
         std::size_t rgb_pitch;
         std::size_t gray_pitch;
-        std::size_t gray_response_pitch;
+        // std::size_t gray_response_pitch;
         checkCudaErrors(cudaMallocPitch((void **)&d_rgb_image, &rgb_pitch, width_char * 3, height));
         checkCudaErrors(cudaMallocPitch((void **)&d_gray_image, &gray_pitch, width_char, height));
-        checkCudaErrors(cudaMalloc((void **)&d_keypoints_exist, keypoints_num * sizeof(bool)));
-        checkCudaErrors(cudaMalloc((void **)&d_keypoints_response, keypoints_num * sizeof(float)));
+        checkCudaErrors(cudaMalloc((void **)&d_aligned_out, _ctx->cam_w * sizeof(unsigned int) * _ctx->cam_h));
+        checkCudaErrors(cudaMalloc((void **)&d_depth_in, _ctx->cam_w * sizeof(uint16_t) * _ctx->cam_h));
+        checkCudaErrors(cudaMalloc((void **)&d_pixel_map, _ctx->cam_w * sizeof(int2) * _ctx->cam_h * 2)); // it needs x2 size
+        // checkCudaErrors(cudaMalloc((void **)&d_keypoints_exist, keypoints_num * sizeof(bool)));
+        // checkCudaErrors(cudaMalloc((void **)&d_keypoints_response, keypoints_num * sizeof(float)));
         checkCudaErrors(cudaMalloc((void **)&d_keypoints_angle, keypoints_num * sizeof(float)));
-        checkCudaErrors(cudaMalloc((void **)&d_keypoints_pos, keypoints_num * sizeof(float2)));
-        checkCudaErrors(cudaMalloc((void **)&d_descriptors, keypoints_num * 32 * sizeof(char)));
+        // checkCudaErrors(cudaMalloc((void **)&d_keypoints_pos, keypoints_num * sizeof(float2)));
+        checkCudaErrors(cudaMalloc((void **)&d_descriptors, keypoints_num * 32 * sizeof(unsigned char)));
 
-        float2 *h_keypoints_pos = (float2 *)malloc(keypoints_num * sizeof(float2));
+        unsigned char *d_corner_lut;
+        checkCudaErrors(cudaMalloc((void **)&d_corner_lut, 64 * 1024));
 
-        std::cout
-            << "GPU thread " << slam_frames_id << " is started on CPU: "
-            << sched_getcpu() << std::endl;
+        /*
+        * Preallocate FeaturePoint struct of arrays
+        * Note to future self:
+        * we use SoA, because of the efficient bearing vector calculation
+        * float x_
+        * float y_:                                      | 2x float
+        * float score_:                                  | 1x float
+        * int level_:                                    | 1x int
+        */
+        const std::size_t bytes_per_featurepoint = sizeof(float) * 4;
+        std::size_t feature_cell_count = grid_cols * grid_rows;
+        std::size_t feature_grid_bytes = feature_cell_count * bytes_per_featurepoint;
+
+        float *d_feature_grid;
+        checkCudaErrors(cudaMalloc((void **)&d_feature_grid, feature_grid_bytes));
+        float2 *d_pos = (float2 *)(d_feature_grid);
+        float *d_score = (d_feature_grid + feature_cell_count * 2);
+        int *d_level = (int *)(d_feature_grid + feature_cell_count * 3);
 
         std::shared_ptr<uint16_t[]> keypoints_x(new uint16_t[keypoints_num]);
         std::shared_ptr<uint16_t[]> keypoints_y(new uint16_t[keypoints_num]);
 
-        std::shared_ptr<vilib::DetectorBaseGPU> detector_gpu_;
-        detector_gpu_.reset(new vilib::FASTGPU(std::size_t(_ctx->cam_w),
-                                               std::size_t(_ctx->cam_h),
-                                               std::size_t(CELL_SIZE_WIDTH),
-                                               std::size_t(CELL_SIZE_HEIGHT),
-                                               std::size_t(PYRAMID_MIN_LEVEL),
-                                               std::size_t(PYRAMID_MAX_LEVEL),
-                                               std::size_t(HORIZONTAL_BORDER),
-                                               std::size_t(VERTICAL_BORDER),
-                                               FAST_EPSILON,
-                                               FAST_MIN_ARC_LENGTH,
-                                               vilib::fast_score(FAST_SCORE)));
-        detector_gpu_->setStream(stream);
+        // Preparing image pyramid
+        std::vector<pyramid_t> pyramid;
+        int prev_width;
+        int prev_height;
+        for (int i = 0; i < PYRAMID_LEVELS; i++)
+        {
+            pyramid_t level;
+            if (i != 0)
+            {
+                level.image_width = prev_width / 2;
+                level.image_height = prev_height / 2;
+            }
+            else
+            {
+                level.image_width = _ctx->cam_w;
+                level.image_height = _ctx->cam_h;
+            }
+            checkCudaErrors(cudaMallocPitch((void **)&level.image,
+                                            &level.image_pitch,
+                                            level.image_width * sizeof(char),
+                                            level.image_height));
+            checkCudaErrors(cudaMallocPitch((void **)&level.response,
+                                            &level.response_pitch,
+                                            level.image_width * sizeof(float),
+                                            level.image_height));
+            pyramid.push_back(level);
+            prev_width = level.image_width;
+            prev_height = level.image_height;
+        }
 
-        std::vector<std::shared_ptr<vilib::Subframe>> pyramid_;
-
-        // Initialize the pyramid pool
-        vilib::PyramidPool::init(slam_frames_id,
-                                 std::size_t(_ctx->cam_w),
-                                 std::size_t(_ctx->cam_h),
-                                 1, // grayscale
-                                 PYRAMID_LEVELS,
-                                 SLAM_IMAGE_PYRAMID_MEMORY_TYPE);
-
-        vilib::PyramidPool::get(slam_frames_id,
-                                std::size_t(_ctx->cam_w),
-                                std::size_t(_ctx->cam_h),
-                                sizeof(char),
-                                PYRAMID_LEVELS,
-                                SLAM_IMAGE_PYRAMID_MEMORY_TYPE,
-                                pyramid_);
-
-        std::cout << " vilib::PyramidPool initialized " << std::endl;
+        fast_gpu_calculate_lut(d_corner_lut, FAST_MIN_ARC_LENGTH);
 
         while (!exit_gpu_pipeline)
         {
@@ -167,11 +212,40 @@ namespace Jetracer
             if (!slam_frames[slam_frames_id]->image_ready_for_process)
                 continue;
 
-            auto slam_frame = std::make_shared<slam_frame_t>();
+            std::shared_ptr<Jetracer::slam_frame_t> slam_frame = std::make_shared<slam_frame_t>();
+            slam_frame->image = (unsigned char *)malloc(_ctx->cam_h * _ctx->cam_w * sizeof(char));
+
+            std::shared_ptr<float[]> h_feature_grid(new float[feature_cell_count * 4]);
+            float2 *h_pos = (float2 *)(h_feature_grid.get());
+            float *h_score = (h_feature_grid.get() + feature_cell_count * 2);
+            int *h_level = (int *)(h_feature_grid.get() + feature_cell_count * 3);
+
             std::chrono::_V2::system_clock::time_point stop;
             std::chrono::_V2::system_clock::time_point start = high_resolution_clock::now();
-            cv::Mat image(_ctx->cam_h, _ctx->cam_w, CV_8UC1);
 
+            // --------------- align depth to RGB -----------------
+            checkCudaErrors(cudaMemcpyAsync((void *)d_depth_in,
+                                            slam_frames[slam_frames_id]->rgbd_frame->depth_frame.get_data(),
+                                            _ctx->cam_w * sizeof(uint16_t) * _ctx->cam_h,
+                                            cudaMemcpyHostToDevice,
+                                            align_stream));
+            //                              align_stream));
+
+            // std::cout << "----> align_depth_to_other" << std::endl;
+            align_depth_to_other(d_aligned_out,
+                                 d_depth_in,
+                                 d_pixel_map,
+                                 depth_scale,
+                                 _ctx->cam_w,
+                                 _ctx->cam_h,
+                                 _d_depth_intrinsics,
+                                 _d_rgb_intrinsics,
+                                 _d_depth_rgb_extrinsics,
+                                 align_stream);
+            // std::cout << "<---- align_depth_to_other" << std::endl;
+
+            // Align depth with Color images and Keypoints compute are going in parallel CUDA streams for better GPU utilization
+            //--------------- Keypoints find/compute -------------
             checkCudaErrors(cudaMemcpy2DAsync((void *)d_rgb_image,
                                               rgb_pitch,
                                               slam_frames[slam_frames_id]->rgbd_frame->rgb_frame.get_data(),
@@ -189,6 +263,7 @@ namespace Jetracer
             //                  rgb_pitch,
             //                  stream);
 
+            // std::cout << "<---- rgb_to_grayscale" << std::endl;
             rgb_to_grayscale(d_gray_image,
                              d_rgb_image,
                              _ctx->cam_w,
@@ -197,55 +272,79 @@ namespace Jetracer
                              rgb_pitch,
                              stream);
 
-            gaussian_blur_3x3(pyramid_[0]->data_,
-                              pyramid_[0]->pitch_,
+            // std::cout << "<---- gaussian_blur_3x3" << std::endl;
+            gaussian_blur_3x3(pyramid[0].image,
+                              pyramid[0].image_pitch,
                               d_gray_image,
                               gray_pitch,
                               _ctx->cam_w,
                               _ctx->cam_h,
                               stream);
+            // checkCudaErrors(cudaStreamSynchronize(stream));
 
-            checkCudaErrors(cudaMemcpy2DAsync((void *)image.data,
-                                              image.step,
-                                              pyramid_[0]->data_,
-                                              pyramid_[0]->pitch_,
+            // std::cout << "<---- pyramid.size() " << pyramid.size()
+            //           << "<---- pyramid[0].image_pitch " << pyramid[0].image_pitch
+            //           << std::endl;
+            // std::cout << "<---- cudaMemcpy2DAsync" << std::endl;
+            checkCudaErrors(cudaMemcpy2DAsync((void *)slam_frame->image,
+                                              _ctx->cam_w,
+                                              pyramid[0].image,
+                                              pyramid[0].image_pitch,
                                               _ctx->cam_w,
                                               _ctx->cam_h,
                                               cudaMemcpyDeviceToHost,
                                               stream));
+            // checkCudaErrors(cudaStreamSynchronize(stream));
 
-            vilib::pyramid_create_gpu(pyramid_, stream);
+            // std::cout << "<---- pyramid_create_levels" << std::endl;
+            pyramid_create_levels(pyramid, stream);
+            // checkCudaErrors(cudaStreamSynchronize(stream));
 
-            detector_gpu_->detect(pyramid_);
+            // std::cout << "<---- detect" << std::endl;
+            detect(pyramid,
+                   d_corner_lut,
+                   FAST_EPSILON,
+                   d_pos,
+                   d_score,
+                   d_level,
+                   stream);
 
+            // std::cout << "<---- compute_fast_angle" << std::endl;
             compute_fast_angle(d_keypoints_angle,
-                               detector_gpu_->d_pos_,
-                               pyramid_[0]->data_,
-                               pyramid_[0]->pitch_,
+                               d_pos,
+                               pyramid[0].image,
+                               pyramid[0].image_pitch,
                                _ctx->cam_w,
                                _ctx->cam_h,
                                keypoints_num,
                                stream);
 
             calc_orb(d_keypoints_angle,
-                     detector_gpu_->d_pos_,
+                     d_pos,
                      d_descriptors,
-                     pyramid_[0]->data_,
-                     pyramid_[0]->pitch_,
+                     pyramid[0].image,
+                     pyramid[0].image_pitch,
                      _ctx->cam_w,
                      _ctx->cam_h,
                      keypoints_num,
                      stream);
 
-            stop = high_resolution_clock::now();
-            auto &points_gpu = detector_gpu_->getPoints();
+            checkCudaErrors(cudaMemcpyAsync((void *)h_feature_grid.get(),
+                                            d_feature_grid,
+                                            feature_grid_bytes,
+                                            cudaMemcpyDeviceToHost,
+                                            stream));
 
-#pragma unroll
+            checkCudaErrors(cudaStreamSynchronize(stream));
+            checkCudaErrors(cudaStreamSynchronize(align_stream));
+            stop = high_resolution_clock::now();
+
             // copy keypoints to slam_frame
+#pragma unroll
             for (int i = 0; i < keypoints_num; i++)
             {
-                keypoints_x[i] = uint16_t(points_gpu[i].x_);
-                keypoints_y[i] = uint16_t(points_gpu[i].y_);
+                keypoints_x[i] = uint16_t(h_pos[i].x);
+                keypoints_y[i] = uint16_t(h_pos[i].y);
             }
 
             // sleep(2);
@@ -255,7 +354,7 @@ namespace Jetracer
 
             auto duration = duration_cast<microseconds>(stop - start);
 
-            slam_frame->image = image;
+            // slam_frame->image = image;
             slam_frame->keypoints_count = keypoints_num;
 
             slam_frame->keypoints_x = keypoints_x;
@@ -280,8 +379,10 @@ namespace Jetracer
 
         checkCudaErrors(cudaFree(d_rgb_image));
         checkCudaErrors(cudaFree(d_gray_image));
-        checkCudaErrors(cudaFree(d_keypoints_exist));
-        checkCudaErrors(cudaFree(d_keypoints_response));
+        checkCudaErrors(cudaFree(d_aligned_out));
+        checkCudaErrors(cudaFree(d_depth_in));
+        // checkCudaErrors(cudaFree(d_keypoints_exist));
+        // checkCudaErrors(cudaFree(d_keypoints_response));
         checkCudaErrors(cudaFree(d_keypoints_angle));
         checkCudaErrors(cudaFree(d_descriptors));
 
