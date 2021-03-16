@@ -15,7 +15,7 @@ namespace Jetracer
     {
         int cam_w = 848;
         int cam_h = 480;
-        int fps = 60; // depth and color realsense streams must support fps for "cam_w x cam_w" resolution
+        int fps = 60; // depth and color realsense streams must support fps for "cam_w x cam_h" resolution
         int PingPong_max_queue_legth = 1;
         int RealSenseD400_autoexposure_settle_frame = 20;
         int RealSenseD400_max_queue_legth = 3;

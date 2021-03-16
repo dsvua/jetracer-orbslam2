@@ -11,7 +11,7 @@
 // #include "../external/vilib/config.h"
 // #include "vilib/common/subframe.h"
 
-#include "../cuda/rscuda_utils.cuh"
+// #include "../cuda/rscuda_utils.cuh"
 #include "../cuda/cuda_RGB_to_Grayscale.cuh"
 #include "../cuda/orb.cuh"
 #include "../cuda/cuda-align.cuh"

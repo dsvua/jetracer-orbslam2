@@ -26,10 +26,6 @@ namespace Jetracer
         int y = blockIdx.y;
         int blur_sum = 0;
 
-        int a = 0;
-        int b = 0;
-        int c = 0;
-
         if (x < image_width)
         {
             int a = image[(y - 1) * image_pitch + x];

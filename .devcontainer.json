@@ -16,6 +16,7 @@
     "ms-vscode.cpptools",
     "ms-vscode.cmake-tools",
     "ms-azuretools.vscode-docker",
+    "nachocab.highlight-dodgy-characters",
     "twxs.cmake"
   ],
   "containerEnv": {
