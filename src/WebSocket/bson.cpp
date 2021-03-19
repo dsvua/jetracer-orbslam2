@@ -51,7 +51,7 @@ namespace Jetracer
         {
             buffer_ = (uint8_t *)malloc(size_ * sizeof(uint8_t));
         }
-        buffer_[408750] = 0;
+        // buffer_[408750] = 0;
 
         uint32_t *tmp_ptr = reinterpret_cast<uint32_t *>(buffer_);
         tmp_ptr[0] = size_;

@@ -21,6 +21,7 @@
 
 #include <unistd.h> // for sleep function
 #include <chrono>
+#include <nvjpeg.h>
 using namespace std::chrono;
 
 // using namespace std;
@@ -149,6 +150,20 @@ namespace Jetracer
         unsigned char *d_corner_lut;
         checkCudaErrors(cudaMalloc((void **)&d_corner_lut, 64 * 1024));
 
+        //nvJPEG to encode RGB image to jpeg
+        nvjpegHandle_t nv_handle;
+        nvjpegEncoderState_t nv_enc_state;
+        nvjpegEncoderParams_t nv_enc_params;
+        int resize_quality = 90;
+
+        CHECK_NVJPEG(nvjpegCreateSimple(&nv_handle));
+        CHECK_NVJPEG(nvjpegEncoderStateCreate(nv_handle, &nv_enc_state, stream));
+        CHECK_NVJPEG(nvjpegEncoderParamsCreate(nv_handle, &nv_enc_params, stream));
+        CHECK_NVJPEG(nvjpegEncoderParamsSetQuality(nv_enc_params, resize_quality, stream));
+        CHECK_NVJPEG(nvjpegEncoderParamsSetSamplingFactors(nv_enc_params, NVJPEG_CSS_420, stream));
+        // CHECK_NVJPEG(nvjpegEncoderParamsSetOptimizedHuffman(nv_enc_params, 0, NULL));
+        nvjpegImage_t nv_image;
+
         /*
         * Preallocate FeaturePoint struct of arrays
         * Note to future self:
@@ -213,11 +228,11 @@ namespace Jetracer
                 continue;
 
             std::shared_ptr<Jetracer::slam_frame_t> slam_frame = std::make_shared<slam_frame_t>();
-            slam_frame->image = (unsigned char *)malloc(_ctx->cam_h * _ctx->cam_w * sizeof(char));
+            // slam_frame->image = (unsigned char *)malloc(_ctx->cam_h * _ctx->cam_w * sizeof(char));
 
             std::shared_ptr<float[]> h_feature_grid(new float[feature_cell_count * 4]);
             float2 *h_pos = (float2 *)(h_feature_grid.get());
-            float *h_score = (h_feature_grid.get() + feature_cell_count * 2);
+            float *h_score = reinterpret_cast<float *>(h_feature_grid.get() + feature_cell_count * 2);
             int *h_level = (int *)(h_feature_grid.get() + feature_cell_count * 3);
 
             std::chrono::_V2::system_clock::time_point stop;
@@ -263,7 +278,6 @@ namespace Jetracer
             //                  rgb_pitch,
             //                  stream);
 
-            // std::cout << "<---- rgb_to_grayscale" << std::endl;
             rgb_to_grayscale(d_gray_image,
                              d_rgb_image,
                              _ctx->cam_w,
@@ -272,7 +286,6 @@ namespace Jetracer
                              rgb_pitch,
                              stream);
 
-            // std::cout << "<---- gaussian_blur_3x3" << std::endl;
             gaussian_blur_3x3(pyramid[0].image,
                               pyramid[0].image_pitch,
                               d_gray_image,
@@ -280,27 +293,18 @@ namespace Jetracer
                               _ctx->cam_w,
                               _ctx->cam_h,
                               stream);
-            // checkCudaErrors(cudaStreamSynchronize(stream));
 
-            // std::cout << "<---- pyramid.size() " << pyramid.size()
-            //           << "<---- pyramid[0].image_pitch " << pyramid[0].image_pitch
-            //           << std::endl;
-            // std::cout << "<---- cudaMemcpy2DAsync" << std::endl;
-            checkCudaErrors(cudaMemcpy2DAsync((void *)slam_frame->image,
-                                              _ctx->cam_w,
-                                              pyramid[0].image,
-                                              pyramid[0].image_pitch,
-                                              _ctx->cam_w,
-                                              _ctx->cam_h,
-                                              cudaMemcpyDeviceToHost,
-                                              stream));
-            // checkCudaErrors(cudaStreamSynchronize(stream));
+            // checkCudaErrors(cudaMemcpy2DAsync((void *)slam_frame->image,
+            //                                   _ctx->cam_w,
+            //                                   pyramid[0].image,
+            //                                   pyramid[0].image_pitch,
+            //                                   _ctx->cam_w,
+            //                                   _ctx->cam_h,
+            //                                   cudaMemcpyDeviceToHost,
+            //                                   stream));
 
-            // std::cout << "<---- pyramid_create_levels" << std::endl;
             pyramid_create_levels(pyramid, stream);
-            // checkCudaErrors(cudaStreamSynchronize(stream));
 
-            // std::cout << "<---- detect" << std::endl;
             detect(pyramid,
                    d_corner_lut,
                    FAST_EPSILON,
@@ -309,7 +313,6 @@ namespace Jetracer
                    d_level,
                    stream);
 
-            // std::cout << "<---- compute_fast_angle" << std::endl;
             compute_fast_angle(d_keypoints_angle,
                                d_pos,
                                pyramid[0].image,
@@ -335,12 +338,37 @@ namespace Jetracer
                                             cudaMemcpyDeviceToHost,
                                             stream));
 
+            // Fill nv_image with image data, let's say 848x480 image in RGB format
+            for (int i = 0; i < 3; i++)
+            {
+                nv_image.channel[i] = pyramid[0].image;
+                nv_image.pitch[i] = pyramid[0].image_pitch;
+                // checkCudaErrors(cudaMalloc((void **)&(nv_image.channel[i]), image_channel_size));
+                // nv_image.pitch[i] = _ctx->cam_w;
+                // checkCudaErrors(cudaMemcpy(nv_image.channel[i], casted_image + image_channel_size * i, image_channel_size, cudaMemcpyHostToDevice));
+            }
+
+            // Compress image
+            CHECK_NVJPEG(nvjpegEncodeImage(nv_handle, nv_enc_state, nv_enc_params,
+                                           &nv_image, NVJPEG_INPUT_RGB, _ctx->cam_w, _ctx->cam_h, stream));
+
+            // get compressed stream size
+            size_t length;
+            // std::cout << "<---- nvjpegEncodeRetrieveBitstream length" << std::endl;
+            CHECK_NVJPEG(nvjpegEncodeRetrieveBitstream(nv_handle, nv_enc_state, NULL, &length, stream));
+            // get stream itself
+            checkCudaErrors(cudaStreamSynchronize(stream));
+            slam_frame->image = (unsigned char *)malloc(length * sizeof(char));
+            slam_frame->image_length = length;
+            // std::cout << "<---- nvjpegEncodeRetrieveBitstream slam_frame->image, length: " << length << std::endl;
+            CHECK_NVJPEG(nvjpegEncodeRetrieveBitstream(nv_handle, nv_enc_state, (slam_frame->image), &length, stream));
             checkCudaErrors(cudaStreamSynchronize(stream));
             checkCudaErrors(cudaStreamSynchronize(align_stream));
             stop = high_resolution_clock::now();
 
             // copy keypoints to slam_frame
 #pragma unroll
+            slam_frame->keypoints_count = 0;
             for (int i = 0; i < keypoints_num; i++)
             {
                 keypoints_x[i] = uint16_t(h_pos[i].x);

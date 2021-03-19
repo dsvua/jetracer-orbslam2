@@ -78,7 +78,7 @@ namespace Jetracer
             // nvjpegImage_t nv_image;
             // const unsigned char *casted_image = static_cast<const unsigned char *>(rgb_frame->depth_frame.get_data());
             // int image_channel_size = _ctx->cam_w * _ctx->cam_h;
-            // Fill nv_image with image data, let’s say 848x480 image in RGB format
+            // Fill nv_image with image data, let's say 848x480 image in RGB format
             // for (int i = 0; i < 3; i++)
             // {
             //     CHECK_CUDA(cudaMalloc((void **)&(nv_image.channel[i]), image_channel_size));

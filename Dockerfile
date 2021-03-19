@@ -9,6 +9,7 @@ RUN ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime && \
     apt-get install -y --no-install-recommends tzdata && \
     dpkg-reconfigure --frontend noninteractive tzdata && \
     apt-get install -y --no-install-recommends \
+    libeigen3-dev \
     libglvnd0 \
     libgl1 \
     libglx0 \
@@ -84,3 +85,14 @@ RUN cd $HOME && wget -q https://github.com/NVIDIA/cuda-samples/archive/v10.2.tar
 # Env vars for the nvidia-container-runtime.
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
+
+# Install opencv
+# RUN apt-get update && \
+#     apt-get install -y libopencv-dev \
+#     libopencv-core-dev \
+#     libopencv-calib3d-dev \
+#     libopencv-features2d-dev \
+#     libopencv-imgcodecs-dev \
+#     libopencv-imgproc-dev && \
+#     rm -rf /var/lib/apt/lists/*
+

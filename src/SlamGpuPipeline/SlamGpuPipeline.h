@@ -28,6 +28,16 @@ namespace Jetracer
 
 #pragma once
 
+#define CHECK_NVJPEG(call)                                                                                  \
+    {                                                                                                       \
+        nvjpegStatus_t _e = (call);                                                                         \
+        if (_e != NVJPEG_STATUS_SUCCESS)                                                                    \
+        {                                                                                                   \
+            std::cout << "NVJPEG failure: '#" << _e << "' at " << __FILE__ << ":" << __LINE__ << std::endl; \
+            exit(1);                                                                                        \
+        }                                                                                                   \
+    }
+
     typedef struct slam_frame_callback
     {
         std::shared_ptr<rgbd_frame_t> rgbd_frame;
@@ -41,6 +51,7 @@ namespace Jetracer
     typedef struct slam_frame
     {
         unsigned char *image;
+        size_t image_length;
         std::shared_ptr<uint16_t[]> keypoints_x;
         std::shared_ptr<uint16_t[]> keypoints_y;
         int keypoints_count;

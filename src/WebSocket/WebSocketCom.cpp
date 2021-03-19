@@ -171,10 +171,11 @@ namespace Jetracer
                              bson_value_type::bson_binary,
                              slam_frame->keypoints_y.get(),
                              slam_frame->keypoints_count * sizeof(uint16_t));
+            // std::cout << "--------> bson_message.add image ----- " << slam_frame->image_length << std::endl;
             bson_message.add("image",
                              bson_value_type::bson_binary,
                              slam_frame->image,
-                             image_size);
+                             slam_frame->image_length * sizeof(char));
 
             // std::cout << "--------> bson_message.process -----" << std::endl;
             bson_message.process();

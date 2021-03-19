@@ -1,5 +1,5 @@
 // Frame preprocessing
-#define PYRAMID_LEVELS 3
+#define PYRAMID_LEVELS 2
 #define PYRAMID_MIN_LEVEL 0
 #define PYRAMID_MAX_LEVEL PYRAMID_LEVELS
 
