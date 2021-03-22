@@ -12,6 +12,7 @@ using namespace std::chrono;
 #include "../RealSense/RealSenseD400.h"
 #include "../SlamGpuPipeline/SlamGpuPipeline.h"
 #include "bson.h"
+#include "../cuda_common.h"
 
 // using namespace std;
 
@@ -160,6 +161,12 @@ namespace Jetracer
             Bson bson_message;
             // std::cout << "--------> bson_message.add -----" << std::endl;
             int channels = 1;
+            int32_t ax = floor(slam_frame->theta.x * 180 / CUDART_PI_D);
+            int32_t ay = floor(slam_frame->theta.y * 180 / CUDART_PI_D);
+            int32_t az = floor((slam_frame->theta.z - CUDART_PI_D / 2) * 180 / CUDART_PI_D);
+            bson_message.add("ax", bson_value_type::bson_int32, &ax);
+            bson_message.add("ay", bson_value_type::bson_int32, &ay);
+            bson_message.add("az", bson_value_type::bson_int32, &az);
             bson_message.add("width", bson_value_type::bson_int32, &_ctx->cam_w);
             bson_message.add("height", bson_value_type::bson_int32, &_ctx->cam_h);
             bson_message.add("channels", bson_value_type::bson_int32, &channels);
@@ -171,7 +178,6 @@ namespace Jetracer
                              bson_value_type::bson_binary,
                              slam_frame->keypoints_y.get(),
                              slam_frame->keypoints_count * sizeof(uint16_t));
-            // std::cout << "--------> bson_message.add image ----- " << slam_frame->image_length << std::endl;
             bson_message.add("image",
                              bson_value_type::bson_binary,
                              slam_frame->image,

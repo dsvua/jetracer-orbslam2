@@ -11,6 +11,7 @@
 #include <atomic>
 #include <thread>
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
+#include <cuda_runtime.h>
 #include <chrono>
 
 namespace Jetracer
@@ -38,6 +39,8 @@ namespace Jetracer
     {
         rs2::depth_frame depth_frame = rs2::frame{};
         rs2::video_frame rgb_frame = rs2::frame{};
+
+        float3 theta; // gyro and accel computed angles for this frame
 
         // double timestamp;
         // unsigned long long frame_id;

@@ -45,6 +45,15 @@ namespace Jetracer
                               const rs2_extrinsics *d_depth_to_other,
                               cudaStream_t stream);
 
+    void keypoint_pixel_to_point(unsigned int *d_aligned_depth,
+                                 const rs2_intrinsics *d_rgb_intrin,
+                                 int image_width,
+                                 int image_height,
+                                 float2 *d_pos,
+                                 double *d_points,
+                                 int keypoints_num,
+                                 cudaStream_t stream);
+
 }
 
 #endif // JETRACER_CUDA_ALIGN_UTILS_H

@@ -19,13 +19,11 @@ ADD_LIBRARY(${PROJECT_NAME}_library_gpu
     cuda/pyramid.cu
     cuda/fast.cu
     cuda/nms.cu
+    cuda/post_processing.cu
     RealSense/SaveRawData.cpp
     SlamGpuPipeline/SlamGpuPipeline.cpp
+    SlamGpuPipeline/buildStream.cpp
     cuda_common.cpp
-)
-
-ADD_LIBRARY(${PROJECT_NAME}_library_FA3R
-    external/FA3R/FA3R.cpp
 )
 
 #ds main executable (pthread is used for the GUI thread)
@@ -43,15 +41,13 @@ SET_TARGET_PROPERTIES(${PROJECT_NAME}_library PROPERTIES POSITION_INDEPENDENT_CO
 SET_TARGET_PROPERTIES(${PROJECT_NAME}_library PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # TARGET_LINK_LIBRARIES(${PROJECT_NAME}_library_gpu PUBLIC jetracer_library ${PROJECT_NAME}_vilib Eigen3::Eigen ${realsense2_LIBRARY} ${OpenCV_LIBS} ${CUDART_LIBRARY} ${CUDADEVRT_LIBRARY} -pthread)
-TARGET_LINK_LIBRARIES(${PROJECT_NAME}_library_gpu PUBLIC jetracer_library ${realsense2_LIBRARY} nvjpeg Eigen3::Eigen -pthread)
+TARGET_LINK_LIBRARIES(${PROJECT_NAME}_library_gpu PUBLIC jetracer_library ${realsense2_LIBRARY} nvjpeg -pthread)
 SET_TARGET_PROPERTIES(${PROJECT_NAME}_library_gpu PROPERTIES POSITION_INDEPENDENT_CODE ON)
 SET_TARGET_PROPERTIES(${PROJECT_NAME}_library_gpu PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 SET_TARGET_PROPERTIES(${PROJECT_NAME}_library_gpu PROPERTIES CUDA_ARCHITECTURES 52)
 SET_SOURCE_FILES_PROPERTIES(${PROJECT_NAME}_library_gpu PROPERTIES LANGUAGE CUDA)
 
-TARGET_LINK_LIBRARIES(${PROJECT_NAME}_library_FA3R PUBLIC Eigen3::Eigen -pthread)
-
 message(STATUS "CUDA_cudadevrt_LIBRARY ${CUDA_cudadevrt_LIBRARY}")
 message(STATUS "CUDADEVRT_LIBRARY ${CUDADEVRT_LIBRARY}")
 
-INCLUDE_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}/external" "/root/cuda-samples/Common")
+INCLUDE_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}/external" "/root/cuda-samples/Common" Eigen3::Eigen)

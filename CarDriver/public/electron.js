@@ -7,12 +7,15 @@ function createWindow() {
   // Create the browser window.
   const win = new BrowserWindow({
     width: 848,
-    height: 600,
+    height: 480,
+    // height: 600,
     webPreferences: {
       nodeIntegration: true
     },
     show: false
   });
+
+  win.setAspectRatio(848/480);
 
   // and load the index.html of the app.
   // win.loadFile("index.html");

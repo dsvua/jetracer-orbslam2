@@ -85,6 +85,34 @@ namespace Jetracer
         point[2] = depth;
     }
 
+    /* Given pixel coordinates and depth in an image with no distortion or inverse distortion coefficients, compute the corresponding point in 3D space relative to the same camera */
+    __device__ static void deproject_pixel_to_point_double(double *point,
+                                                           const struct rs2_intrinsics *intrin,
+                                                           const float pixel[2],
+                                                           float depth)
+    {
+        assert(intrin->model != RS2_DISTORTION_MODIFIED_BROWN_CONRADY); // Cannot deproject from a forward-distorted image
+        assert(intrin->model != RS2_DISTORTION_FTHETA);                 // Cannot deproject to an ftheta image
+        //assert(intrin->model != RS2_DISTORTION_BROWN_CONRADY); // Cannot deproject to an brown conrady model
+
+        double x = (pixel[0] - intrin->ppx) / intrin->fx;
+        double y = (pixel[1] - intrin->ppy) / intrin->fy;
+
+        if (intrin->model == RS2_DISTORTION_INVERSE_BROWN_CONRADY)
+        {
+            double r2 = x * x + y * y;
+            double f = 1 + intrin->coeffs[0] * r2 + intrin->coeffs[1] * r2 * r2 + intrin->coeffs[4] * r2 * r2 * r2;
+            double ux = x * f + 2 * intrin->coeffs[2] * x * y + intrin->coeffs[3] * (r2 + 2 * x * x);
+            double uy = y * f + 2 * intrin->coeffs[3] * x * y + intrin->coeffs[2] * (r2 + 2 * y * y);
+            x = ux;
+            y = uy;
+        }
+        double depth_d = double(depth);
+        point[0] = depth_d * x;
+        point[1] = depth_d * y;
+        point[2] = depth_d;
+    }
+
     /* Transform 3D coordinates relative to one sensor to 3D coordinates relative to another viewpoint */
     __device__ static void transform_point_to_point(float to_point[3],
                                                     const struct rs2_extrinsics *extrin,
@@ -231,6 +259,18 @@ namespace Jetracer
         }
     }
 
+    __global__ void kernel_reset_to_max(unsigned int *aligned_out,
+                                         const rs2_intrinsics *other_intrin)
+    {
+        int x = blockIdx.x * blockDim.x + threadIdx.x;
+        int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+        if (x < other_intrin->width && y < other_intrin->height)
+        {
+            aligned_out[y * other_intrin->width + x] = 9999999;
+        }
+    }
+
     __global__ void kernel_reset_to_zero(unsigned int *aligned_out,
                                          const rs2_intrinsics *other_intrin)
     {
@@ -239,7 +279,31 @@ namespace Jetracer
 
         if (x < other_intrin->width && y < other_intrin->height)
         {
-            aligned_out[y * other_intrin->width + x] = 0;
+            if(aligned_out[y * other_intrin->width + x] == 9999999)
+                aligned_out[y * other_intrin->width + x] = 0;
+        }
+    }
+
+    __global__ void kernel_keypoint_pixel_to_point(unsigned int *d_aligned_depth,
+                                                   const rs2_intrinsics *d_rgb_intrin,
+                                                   int image_width,
+                                                   int image_height,
+                                                   float2 *d_pos,
+                                                   double *d_points,
+                                                   int keypoints_num)
+    {
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+        if(idx < keypoints_num)
+        {
+            float2 pos = d_pos[idx];
+            int depth = d_aligned_depth[int(pos.y + 0.5) * image_width + int(pos.x + 0.5)];
+            // printf("x: %.3f y: %.3f depth: %d\n", pos.x, pos.y, depth);
+    
+            deproject_pixel_to_point_double(d_points + idx * 3,
+                                            d_rgb_intrin,
+                                            (float*)(&pos),
+                                            float(depth));
         }
     }
 
@@ -267,7 +331,7 @@ namespace Jetracer
                                                                           d_depth_to_other,
                                                                           depth_scale);
 
-        kernel_reset_to_zero<<<other_blocks, threads, 0, stream>>>(d_aligned_out,
+        kernel_reset_to_max<<<other_blocks, threads, 0, stream>>>(d_aligned_out,
                                                                    d_other_intrin);
 
         kernel_depth_to_other<<<depth_blocks, threads, 0, stream>>>(d_aligned_out,
@@ -275,6 +339,31 @@ namespace Jetracer
                                                                     d_pixel_map,
                                                                     d_depth_intrin,
                                                                     d_other_intrin);
+        kernel_reset_to_zero<<<other_blocks, threads, 0, stream>>>(d_aligned_out,
+            d_other_intrin);
+
+}
+
+    void keypoint_pixel_to_point(unsigned int *d_aligned_depth,
+                                 const rs2_intrinsics *d_rgb_intrin,
+                                 int image_width,
+                                 int image_height,
+                                 float2 *d_pos,
+                                 double *d_points,
+                                 int keypoints_num,
+                                 cudaStream_t stream)
+    {
+        dim3 threads(CUDA_WARP_SIZE);
+        int tmp_blocks = (keypoints_num % CUDA_WARP_SIZE == 0) ? keypoints_num / CUDA_WARP_SIZE : keypoints_num / CUDA_WARP_SIZE + 1;
+        dim3 blocks(tmp_blocks);
+        kernel_keypoint_pixel_to_point<<<blocks, threads, 0, stream>>>(d_aligned_depth,
+                                                                       d_rgb_intrin,
+                                                                       image_width,
+                                                                       image_height,
+                                                                       d_pos,
+                                                                       d_points,
+                                                                       keypoints_num);
     }
+
 
 }

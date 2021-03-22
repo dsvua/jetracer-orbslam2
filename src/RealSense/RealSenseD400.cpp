@@ -115,7 +115,7 @@ namespace Jetracer
                     imu_frame_t imu_frame;
                     imu_frame.motion_data = motion.get_motion_data();
                     imu_frame.timestamp = motion.get_timestamp();
-                    imu_frame.frame_type = RS2_STREAM_GYRO;
+                    imu_frame.frame_type = RS2_STREAM_ACCEL;
 
                     event->event_type = EventType::event_realsense_D400_accel;
                     event->message = std::make_shared<imu_frame_t>(imu_frame);
@@ -145,8 +145,8 @@ namespace Jetracer
         cfg.enable_stream(RS2_STREAM_INFRARED, 1, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_Y8, _ctx->fps); // fps for 848x480: 30, 60, 90
         cfg.enable_stream(RS2_STREAM_COLOR, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_RGB8, _ctx->fps);
         cfg.enable_stream(RS2_STREAM_DEPTH, _ctx->cam_w, _ctx->cam_h, RS2_FORMAT_Z16, _ctx->fps);
-        // cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 63); // 63 or 250
-        // cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);  // 200 or 400
+        cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 63); // 63 or 250
+        cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200); // 200 or 400
 
         // Start the camera pipeline
         // selection = pipe.start(cfg, callbackNewFrame);

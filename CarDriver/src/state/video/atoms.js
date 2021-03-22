@@ -14,3 +14,8 @@ export const videoImageParams = atom({
     },
 });
 
+export const cameraAngle = atom({
+    key: 'camera-angle-atom',
+    default: null,
+});
+

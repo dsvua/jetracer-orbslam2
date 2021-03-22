@@ -2,7 +2,7 @@ import './App.css';
 import { WsConnection } from './components/connection';
 import React, {useState, useEffect} from "react";
 import useWebsocket from "./hooks/useWebsockets";
-import { VideoFeed } from "./components/videofeed";
+import { Feed } from "./components/feed";
 
 function getWindowDimensions() {
   const { innerWidth: width, innerHeight: height } = window;
@@ -29,14 +29,14 @@ const App = () => {
   }, []);
 
   return (
-      <div className="container-fluid d-flex flex-column min-vh-100 h-100 w-100">
-        <div className="row align-items-start w-100">
-          {/* <div className="col"> */}
-            <VideoFeed />        
-          {/* </div> */}
-        </div>
+    <div style={{position: 'relative'}}
+         className="container-fluid d-flex flex-column mx-0 px-0 min-vh-100 h-100 w-100">
+          <Feed />        
+      <div style={{position: 'absolute', top:0, left: 0, zIndex:2}}
+           className="container-fluid d-flex flex-column min-vh-100 h-100 w-100">
         <WsConnection />        
       </div>
+    </div>
   );
 }
 

@@ -45,6 +45,7 @@
 
 #ifndef CUDART_PI_F
 #define CUDART_PI_F 3.141592654f
+#define CUDART_PI_D 3.14159265358979323846
 #endif
 
 #ifndef CUDA_WARP_SIZE
@@ -62,6 +63,16 @@ namespace Jetracer
     typedef struct kernel_params kernel_params_t;
 
 #ifndef NDEBUG
+#define CHECK_NVJPEG(call)                                                                                  \
+    {                                                                                                       \
+        nvjpegStatus_t _e = (call);                                                                         \
+        if (_e != NVJPEG_STATUS_SUCCESS)                                                                    \
+        {                                                                                                   \
+            std::cout << "NVJPEG failure: '#" << _e << "' at " << __FILE__ << ":" << __LINE__ << std::endl; \
+            exit(1);                                                                                        \
+        }                                                                                                   \
+    }
+
 #define CUDA_API_CALL(__CALL__)                  \
     do                                           \
     {                                            \
@@ -79,6 +90,7 @@ namespace Jetracer
             assert(0);                           \
         }                                        \
     } while (0)
+
 #define CUDA_KERNEL_CHECK()                       \
     do                                            \
     {                                             \

@@ -388,7 +388,7 @@ namespace Jetracer
                                           3,
                                           d_corner_lut,
                                           threshold,
-                                          FAST_MIN_ARC_LENGTH,
+                                          SUM_OF_ABS_DIFF_ON_ARC,
                                           FAST_SCORE,
                                           pyramid[level].response_pitch,
                                           pyramid[level].response,

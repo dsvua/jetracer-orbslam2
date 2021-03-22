@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import { connectionStateIsConnected, connectionStateWs } from '../state/network'
-import { videoImage, videoImageParams } from '../state/video'
+import { videoImage, videoImageParams, cameraAngle } from '../state/video'
 import BSON from 'bson';
 
 export const useWebsocket = () => {
@@ -9,6 +9,7 @@ export const useWebsocket = () => {
     const setIsConnected = useSetRecoilState(connectionStateIsConnected);
     const setVideoImageParams = useSetRecoilState(videoImageParams);
     const setNewVideoImage = useSetRecoilState(videoImage);
+    const setNewAngle = useSetRecoilState(cameraAngle);
     const [ws, setWs] = useRecoilState(connectionStateWs);
 
     useEffect( () => {
@@ -40,13 +41,25 @@ export const useWebsocket = () => {
                     imageParams.channels = msg.channels;
 
                     // console.log("image pixel:", msg);
-                    setNewVideoImage({
-                        image: new Uint8Array(msg.image.buffer),
-                        x: Uint8Array.from(msg.keypoints_x.buffer),
-                        y: Uint8Array.from(msg.keypoints_y.buffer)
-                    });
-                    setVideoImageParams(imageParams);
-                    // setNewSlamKeyPoints({x: msg.keypoints_x.buffer, y: msg.keypoints_y.buffer})
+                    if (msg.image && msg.keypoints_x && msg.keypoints_y)
+                    {
+                        setNewVideoImage({
+                            image: new Uint8Array(msg.image.buffer),
+                            x: Uint8Array.from(msg.keypoints_x.buffer),
+                            y: Uint8Array.from(msg.keypoints_y.buffer)
+                        });
+                        setVideoImageParams(imageParams);
+                        // setNewSlamKeyPoints({x: msg.keypoints_x.buffer, y: msg.keypoints_y.buffer})
+                    };
+                    // console.log("msg.ax && msg.ay && msg.az", msg.ax, msg.ay, msg.az);
+                    if (msg.ax && msg.ay && msg.az)
+                    {
+                        setNewAngle({
+                            ax: msg.ax,
+                            ay: msg.ay,
+                            az: msg.az,
+                        });
+                    };
                 };
                 try {
                     reader.readAsArrayBuffer(message.data);

@@ -13,6 +13,7 @@
 
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
+#include <eigen3/Eigen/Eigen>
 
 #include "../RealSense/RealSenseD400.h"
 
@@ -27,16 +28,6 @@ namespace Jetracer
 {
 
 #pragma once
-
-#define CHECK_NVJPEG(call)                                                                                  \
-    {                                                                                                       \
-        nvjpegStatus_t _e = (call);                                                                         \
-        if (_e != NVJPEG_STATUS_SUCCESS)                                                                    \
-        {                                                                                                   \
-            std::cout << "NVJPEG failure: '#" << _e << "' at " << __FILE__ << ":" << __LINE__ << std::endl; \
-            exit(1);                                                                                        \
-        }                                                                                                   \
-    }
 
     typedef struct slam_frame_callback
     {
@@ -54,8 +45,20 @@ namespace Jetracer
         size_t image_length;
         std::shared_ptr<uint16_t[]> keypoints_x;
         std::shared_ptr<uint16_t[]> keypoints_y;
+        std::shared_ptr<double[]> h_points;
         int keypoints_count;
+        float3 theta;
         std::shared_ptr<rgbd_frame_t> rgbd_frame;
+
+        Eigen::Matrix4d T_c2w;
+        Eigen::Matrix4d T_w2c;
+
+        ~slam_frame()
+        {
+            delete image;
+            // T_c2w.~MatrixBase();
+            // T_w2c.~MatrixBase();
+        }
 
     } slam_frame_t;
 
@@ -69,6 +72,8 @@ namespace Jetracer
     private:
         void handleEvent(pEvent event);
         void buildStream(int slam_frames_id);
+        void process_gyro(rs2_vector gyro_data, double ts);
+        void process_accel(rs2_vector accel_data);
 
         void upload_intristics(std::shared_ptr<Jetracer::rgbd_frame_t> rgbd_frame);
 
@@ -95,6 +100,16 @@ namespace Jetracer
         rs2_extrinsics *_d_depth_rgb_extrinsics;
 
         int frame_counter = 0;
+
+        // theta is the angle of camera rotation in x, y and z components
+        float3 theta;
+        /* alpha indicates the part that gyro and accelerometer take in computation of theta; higher alpha gives more weight to gyro, but too high
+        values cause drift; lower alpha gives more weight to accelerometer, which is more sensitive to disturbances */
+        float alpha = 0.98;
+        bool firstGyro = true;
+        bool firstAccel = true;
+        // Keeps the arrival time of previous gyro frame
+        double last_ts_gyro = 0;
     };
 } // namespace Jetracer
 

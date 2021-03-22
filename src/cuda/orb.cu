@@ -158,7 +158,7 @@ namespace Jetracer
                                                                     image_width,
                                                                     image_height,
                                                                     keypoints_num);
-        CUDA_KERNEL_CHECK();
+        // CUDA_KERNEL_CHECK();
     }
 
     void calc_orb(float *d_keypoints_angle,

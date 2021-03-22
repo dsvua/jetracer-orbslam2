@@ -14,3 +14,9 @@ export const connectionStateUrl = atom({
     key: 'connection-state-url-atom',
     default: 'ws://localhost:9002',
 });
+
+export const showVideoState = atom({
+    key: 'show-video-state-atom',
+    default: false,
+});
+

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useRecoilValue, useRecoilState } from 'recoil';
+import React, { useEffect, useRef } from 'react';
+import { useRecoilValue } from 'recoil';
 import { videoImage, videoImageParams } from "../state/video";
 import { connectionStateIsConnected } from '../state/network'
-// import { slamKeypoints } from '../state/slam'
-
+import * as THREE from "three";
 
 export const VideoFeed = (props) => {
 
@@ -11,19 +10,7 @@ export const VideoFeed = (props) => {
     const currVideoImageParams = useRecoilValue(videoImageParams);
     // const currSlamKeypoints = useRecoilValue(slamKeypoints);
     const isConnected = useRecoilValue(connectionStateIsConnected);
-
-    const canvasRef = useRef(null);
-
-    // useEffect(() => {
-    //     const canvas = canvasRef.current;
-    //     canvas.width = currVideoImageParams.width;
-    //     canvas.height = currVideoImageParams.height;
-    //     const context = canvas.getContext('2d');
-    //     //Our first draw
-    //     context.fillStyle = '#000000';
-    //     context.fillRect(0, 0, context.canvas.width, context.canvas.height);
-    // }, []);
-    
+   
     useEffect(() => {
 
         if (isConnected){
@@ -37,9 +24,13 @@ export const VideoFeed = (props) => {
         }
     }, [currVideoImage]);
 
+
     return (
         <div>
-            <img id="videoframe" {...props} />
+            <img style={{resizeMode: 'contain'}} 
+            id="videoframe" 
+            className="container-fluid d-flex flex-column mx-0 px-0 min-vh-100 h-100 w-100"
+            {...props} />
         </div>
     )
 }
