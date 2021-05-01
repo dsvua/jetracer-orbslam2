@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     event->event_type = Jetracer::EventType::event_stop_thread;
     mainLoop.pushEvent(event);
     cout << "Main sleep" << endl;
-    sleep(5);
+    // sleep(5);
     mainLoop.exitThread();
     return 0;
 }

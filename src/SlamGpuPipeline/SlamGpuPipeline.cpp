@@ -105,7 +105,7 @@ namespace Jetracer
                 slam_frames[i]->exit_gpu_pipeline = true;
                 slam_frames[i]->thread_cv.notify_one();
                 slam_frames[i]->gpu_thread.join();
-                std::cout << "Stopped GPU thread: " << i << std::endl;
+                // std::cout << "Stopped GPU thread: " << i << std::endl;
             }
             break;
         }

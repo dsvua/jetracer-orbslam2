@@ -671,7 +671,7 @@ namespace Jetracer
         checkCudaErrors(cudaFree(d_depth_in));
         // checkCudaErrors(cudaFree(d_keypoints_exist));
         // checkCudaErrors(cudaFree(d_keypoints_response));
-        printf("---mark---");
+        // printf("---mark---\n");
         checkCudaErrors(cudaFree(d_keypoints_angle));
         checkCudaErrors(cudaFree(d_descriptors_tmp));
         checkCudaErrors(cudaFree(d_descriptors));
