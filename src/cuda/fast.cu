@@ -1,6 +1,7 @@
 #include "fast.cuh"
 #include "nms.cuh"
 #include "../cuda_common.h"
+#include "../SlamGpuPipeline/defines.h"
 
 namespace Jetracer
 {
@@ -164,7 +165,7 @@ namespace Jetracer
         const int y = blockDim.y * blockIdx.y + threadIdx.y; // thread id Y
         if (x < image_width && y < image_height)
         {
-            const int resp_offset = y * (response_pitch_elements / sizeof(float)) + x;
+            const int resp_offset = y * response_pitch_elements + x;
             d_response[resp_offset] = 0.0f;
             if ((x >= horizontal_border) &&
                 (y >= vertical_border) &&
@@ -315,7 +316,7 @@ namespace Jetracer
                                        cudaStream_t stream)
     {
         // Note: I'd like to launch 128 threads / thread block
-        std::size_t threads_per_x = (image_width % 32 == 0) ? 32 : 16;
+        std::size_t threads_per_x = (image_width % CUDA_WARP_SIZE == 0) ? CUDA_WARP_SIZE : 16;
         std::size_t threads_per_y = 128 / threads_per_x;
         dim3 threads(threads_per_x, threads_per_y);
         dim3 blocks((image_width + threads.x - 1) / threads.x,
@@ -378,7 +379,7 @@ namespace Jetracer
                 int *d_level,
                 cudaStream_t stream)
     {
-        for (std::size_t level = 0; level < pyramid.size(); ++level)
+        for (std::size_t level = 0; level < pyramid.size(); level++)
         {
             fast_gpu_calc_corner_response(pyramid[level].image_width,
                                           pyramid[level].image_height,
@@ -390,10 +391,12 @@ namespace Jetracer
                                           threshold,
                                           SUM_OF_ABS_DIFF_ON_ARC,
                                           FAST_SCORE,
-                                          pyramid[level].response_pitch,
+                                          pyramid[level].response_pitch / sizeof(float),
                                           pyramid[level].response,
                                           stream);
         }
+
+        //reset score to 0 if depth is 0
 
         // std::cout << "<---- grid_nms" << std::endl;
         grid_nms(pyramid,

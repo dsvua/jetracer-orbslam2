@@ -259,36 +259,38 @@ namespace Jetracer
                   int *d_level,
                   cudaStream_t stream)
     {
-        for (std::size_t level = 0; level < pyramid.size(); ++level)
+        const int horizontal_cell_num = (pyramid[0].image_width % CUDA_WARP_SIZE == 0) ? pyramid[0].image_width / CUDA_WARP_SIZE : pyramid[0].image_width / CUDA_WARP_SIZE + 1;
+        const int vertical_cell_num = (pyramid[0].image_height % CUDA_WARP_SIZE == 0) ? pyramid[0].image_height / CUDA_WARP_SIZE : pyramid[0].image_height / CUDA_WARP_SIZE + 1;
+        for (std::size_t level = 0; level < pyramid.size(); level++)
         {
             const int cell_size_width_level = (CUDA_WARP_SIZE >> level);
             const int cell_size_height_level = (CUDA_WARP_SIZE >> level);
             int target_threads_per_block = 128;
-            const int horizontal_cell_num = (pyramid[level].image_width % 32 == 0) ? pyramid[level].image_width / 32 : pyramid[level].image_width / 32 + 1;
-            const int vertical_cell_num = (pyramid[level].image_height % 32 == 0) ? pyramid[level].image_height / 32 : pyramid[level].image_height / 32 + 1;
+            // const int horizontal_cell_num = (pyramid[level].image_width % 32 == 0) ? pyramid[level].image_width / 32 : pyramid[level].image_width / 32 + 1;
+            // const int vertical_cell_num = (pyramid[level].image_height % 32 == 0) ? pyramid[level].image_height / 32 : pyramid[level].image_height / 32 + 1;
 
             dim3 threads(cell_size_width_level,
                          max(1, min(target_threads_per_block / cell_size_width_level, cell_size_height_level)));
             dim3 blocks(horizontal_cell_num, vertical_cell_num);
 
             // shared memory allocation
-            int launched_warp_count = (threads.x * threads.y * threads.z + 32 - 1) / 32;
+            int launched_warp_count = (threads.x * threads.y * threads.z + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
             std::size_t shm_mem_size = launched_warp_count * 4 * sizeof(float);
 
             detector_base_gpu_grid_nms_kernel<true><<<blocks, threads, shm_mem_size, stream>>>(
-                level,
-                0,
-                pyramid[level].image_width,
-                pyramid[level].image_height,
-                3,
-                3,
-                cell_size_width_level,
-                cell_size_height_level,
-                pyramid[level].response_pitch / sizeof(float),
-                pyramid[level].response,
-                d_pos,
-                d_score,
-                d_level);
+                                                    level,
+                                                    0,
+                                                    pyramid[level].image_width,
+                                                    pyramid[level].image_height,
+                                                    3,
+                                                    3,
+                                                    cell_size_width_level,
+                                                    cell_size_height_level,
+                                                    pyramid[level].response_pitch / sizeof(float),
+                                                    pyramid[level].response,
+                                                    d_pos,
+                                                    d_score,
+                                                    d_level);
             // checkCudaErrors(cudaStreamSynchronize(stream));
         }
     }

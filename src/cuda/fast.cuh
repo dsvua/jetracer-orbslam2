@@ -7,11 +7,11 @@
 #include "pyramid.cuh"
 
 // FAST detector parameters
-#define FAST_EPSILON (10.0f)
-#define FAST_MIN_ARC_LENGTH 10
+// #define FAST_EPSILON (12.0f)
+// #define FAST_MIN_ARC_LENGTH 12
 // Remark: the Rosten CPU version only works with
 //         SUM_OF_ABS_DIFF_ON_ARC and MAX_THRESHOLD
-#define FAST_SCORE SUM_OF_ABS_DIFF_ON_ARC
+// #define FAST_SCORE SUM_OF_ABS_DIFF_ON_ARC
 
 namespace Jetracer
 {

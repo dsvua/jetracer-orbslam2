@@ -41,11 +41,11 @@ namespace Jetracer
     bool cuda_initialize(void)
     {
         /*
-    * Note to future self and others:
-    * there's no explicit initialization of the CUDA runtime, hence when
-    * the first cudaX...() call is made, the CUDA runtime gets initialized.
-    * This behaviour can skew benchmark measurements.
-    */
+        * Note to future self and others:
+        * there's no explicit initialization of the CUDA runtime, hence when
+        * the first cudaX...() call is made, the CUDA runtime gets initialized.
+        * This behaviour can skew benchmark measurements.
+        */
         int device_count;
         if (cudaGetDeviceCount(&device_count) != cudaSuccess)
         {
@@ -89,6 +89,11 @@ namespace Jetracer
         p.blocks_per_grid.y = 1;
         p.blocks_per_grid.z = 1;
         return p;
+    }
+
+    int calc_block_size(int pixel_count, int thread_count)
+    {
+        return ((pixel_count % thread_count) == 0) ? (pixel_count / thread_count) : (pixel_count / thread_count + 1);
     }
 
 } // namespace Jetracer

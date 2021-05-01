@@ -21,7 +21,7 @@ namespace Jetracer
         int RealSenseD400_max_queue_legth = 3;
         int SaveRawData_max_queue_legth = 1;
         int WebSocketCom_max_queue_legth = 1;
-        float WebSocketCom_max_send_rate = 10.0f * 1024 * 1024; // ~5Mb/s
+        float WebSocketCom_max_send_rate = 5.0f * 1024 * 1024; // ~5Mb/s
         int SlamGpuPipeline_max_queue_length = 5;
         int SlamGpuPipeline_max_streams_length = 1;
         int SlamGpuPipeline_max_keypoints = 1024;
@@ -34,7 +34,7 @@ namespace Jetracer
         int CUDA_THREADS_PER_BLOCK = 32;
 
         // currently unused
-        int frames_to_skip = 30; // discard all frames until start_frame to
+        int frames_to_skip = 50; // discard all frames until start_frame to
                                  // give autoexposure, etc. a chance to settle
         int left_gap = 60;       // ignore left 60 pixels on depth image as they
                                  // usually have 0 distance and are useless
@@ -57,6 +57,12 @@ namespace Jetracer
 
         // std::string images_path = "/home/serhiy/Downloads/images_temp/";
         std::string images_path = "/workspaces/jetracer-orbslam2/images_temp/";
+
+        // SLAM
+        int initial_frame_count = 100;        // number of frames to average distance for keypoints
+                                              // when robot is stationary.
+        float new_keyframe_angle = 0.003f;    // radians turn for new keyframe
+        float new_keyframe_distance = 300.0f; // distance in mm for new keyframe
 
     } context_t;
 

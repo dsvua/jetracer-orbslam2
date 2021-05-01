@@ -120,17 +120,19 @@ namespace Jetracer
 
             std::string filename;
 
-            filename = _ctx->images_path + "color_" + std::to_string(rgbd_frame->rgb_frame.get_timestamp()) + ".bin";
+            filename = _ctx->images_path + "color_" + std::to_string(rgbd_frame->timestamp) + ".bin";
             // std::cout << "Saving file " << filename << " size " << std::to_string(rgbd_frame->image_size) << std::endl;
             std::ofstream image_file(filename, std::ofstream::binary);
-            const char *image_buffer = static_cast<const char *>(rgbd_frame->rgb_frame.get_data());
+            // const char *image_buffer = static_cast<const char *>(rgbd_frame->rgb_image);
+            char *image_buffer = (char *)(rgbd_frame->rgb_image);
             image_file.write(image_buffer, _ctx->cam_w * _ctx->cam_h * 3);
             image_file.close();
 
-            filename = _ctx->images_path + "depth_" + std::to_string(rgbd_frame->depth_frame.get_timestamp()) + ".bin";
+            filename = _ctx->images_path + "depth_" + std::to_string(rgbd_frame->timestamp) + ".bin";
             // std::cout << "Saving file " << filename << " size " << std::to_string(rgbd_frame->depth_size) << std::endl;
             std::ofstream depth_file(filename, std::ofstream::binary);
-            const char *depth_buffer = static_cast<const char *>(rgbd_frame->depth_frame.get_data());
+            // const char *depth_buffer = static_cast<const char *>(rgbd_frame->depth_image);
+            char *depth_buffer = (char *)(rgbd_frame->depth_image);
             depth_file.write(depth_buffer, _ctx->cam_w * _ctx->cam_h * 2);
             depth_file.close();
 

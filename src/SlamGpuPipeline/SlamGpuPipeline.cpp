@@ -45,6 +45,7 @@ namespace Jetracer
             deleted_slam_frames.push_back(_ctx->SlamGpuPipeline_max_streams_length - i - 1);
 
             slam_frames[i] = std::make_shared<slam_frame_callback_t>();
+            slam_frames[i]->exit_gpu_pipeline = false;
             slam_frames[i]->gpu_thread = std::thread(&SlamGpuPipeline::buildStream, this, i);
         }
 
@@ -60,12 +61,16 @@ namespace Jetracer
     {
         // std::cout << "Uploading intinsics " << std::endl;
 
-        auto rgb_profile = rgbd_frame->rgb_frame.get_profile().as<rs2::video_stream_profile>();
-        auto depth_profile = rgbd_frame->depth_frame.get_profile().as<rs2::video_stream_profile>();
+        // auto rgb_profile = rgbd_frame->rgb_frame.get_profile().as<rs2::video_stream_profile>();
+        // auto depth_profile = rgbd_frame->depth_frame.get_profile().as<rs2::video_stream_profile>();
 
-        rs2_intrinsics h_rgb_intrinsics = rgb_profile.get_intrinsics();
-        rs2_intrinsics h_depth_intrinsics = depth_profile.get_intrinsics();
-        rs2_extrinsics h_depth_rgb_extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
+        // rs2_intrinsics h_rgb_intrinsics = rgb_profile.get_intrinsics();
+        // rs2_intrinsics h_depth_intrinsics = depth_profile.get_intrinsics();
+        // rs2_extrinsics h_depth_rgb_extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
+
+        rs2_intrinsics h_rgb_intrinsics = rgbd_frame->rgb_intristics;
+        rs2_intrinsics h_depth_intrinsics = rgbd_frame->depth_intristics;
+        rs2_extrinsics h_depth_rgb_extrinsics = rgbd_frame->extrinsics;
 
         checkCudaErrors(cudaMemcpy((void *)_d_rgb_intrinsics,
                                    &h_rgb_intrinsics,
@@ -80,7 +85,7 @@ namespace Jetracer
                                    sizeof(rs2_extrinsics),
                                    cudaMemcpyHostToDevice));
 
-        depth_scale = rgbd_frame->depth_frame.get_units();
+        depth_scale = rgbd_frame->depth_scale;
         intristics_are_known = true;
         std::cout << "Uploaded intinsics " << std::endl;
     }
@@ -93,12 +98,14 @@ namespace Jetracer
 
         case EventType::event_stop_thread:
         {
-            exit_gpu_pipeline = true;
             std::cout << "Stopping GPU threads" << std::endl;
             for (int i = 0; i < _ctx->SlamGpuPipeline_max_streams_length; i++)
             {
+                std::cout << "Stopping GPU thread: " << i << std::endl;
+                slam_frames[i]->exit_gpu_pipeline = true;
                 slam_frames[i]->thread_cv.notify_one();
                 slam_frames[i]->gpu_thread.join();
+                std::cout << "Stopped GPU thread: " << i << std::endl;
             }
             break;
         }
@@ -129,8 +136,8 @@ namespace Jetracer
             }
             else
             {
-                rgb_curr_frame_id = rgbd_frame->rgb_frame.get_frame_number();
-                depth_curr_frame_id = rgbd_frame->depth_frame.get_frame_number();
+                rgb_curr_frame_id = rgbd_frame->rgb_frame_id;
+                depth_curr_frame_id = rgbd_frame->depth_frame_id;
 
                 // need to check if current frame is not the same as previous
                 // as sometimes librealsens sends the same frames few times

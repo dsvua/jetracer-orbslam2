@@ -19,11 +19,6 @@ namespace Jetracer
         unsigned char b[N];
     };
 
-    int calc_block_size(int pixel_count, int thread_count)
-    {
-        return ((pixel_count % thread_count) == 0) ? (pixel_count / thread_count) : (pixel_count / thread_count + 1);
-    }
-
     /* Given a point in 3D space, compute the corresponding pixel coordinates in an image with no distortion or forward distortion coefficients produced by the same camera */
     __device__ static void project_point_to_pixel(float pixel[2],
                                                   const struct rs2_intrinsics *intrin,
@@ -260,7 +255,7 @@ namespace Jetracer
     }
 
     __global__ void kernel_reset_to_max(unsigned int *aligned_out,
-                                         const rs2_intrinsics *other_intrin)
+                                        const rs2_intrinsics *other_intrin)
     {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
         int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -279,7 +274,7 @@ namespace Jetracer
 
         if (x < other_intrin->width && y < other_intrin->height)
         {
-            if(aligned_out[y * other_intrin->width + x] == 9999999)
+            if (aligned_out[y * other_intrin->width + x] == 9999999)
                 aligned_out[y * other_intrin->width + x] = 0;
         }
     }
@@ -288,22 +283,83 @@ namespace Jetracer
                                                    const rs2_intrinsics *d_rgb_intrin,
                                                    int image_width,
                                                    int image_height,
-                                                   float2 *d_pos,
+                                                   float2 *d_pos_out,
+                                                   float2 *d_pos_in,
+                                                   float *d_score,
                                                    double *d_points,
-                                                   int keypoints_num)
+                                                   uint32_t *d_descriptors_out,
+                                                   uint32_t *d_descriptors_in,
+                                                   int keypoints_num,
+                                                   int *d_valid_keypoints_num)
     {
         int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        __shared__ int warp_counter;
+        __shared__ int global_idx;
+        int local_idx = 0;
+        float2 pos;
+        int depth = 0;
+        float score;
 
-        if(idx < keypoints_num)
+        if (threadIdx.x == 0)
         {
-            float2 pos = d_pos[idx];
-            int depth = d_aligned_depth[int(pos.y + 0.5) * image_width + int(pos.x + 0.5)];
-            // printf("x: %.3f y: %.3f depth: %d\n", pos.x, pos.y, depth);
-    
-            deproject_pixel_to_point_double(d_points + idx * 3,
-                                            d_rgb_intrin,
-                                            (float*)(&pos),
-                                            float(depth));
+            warp_counter = 0;
+            global_idx = 0;
+        }
+
+        __syncthreads();
+
+        if (idx < keypoints_num)
+        {
+            pos = d_pos_in[idx];
+            int tmp_depth;
+            int depth_counter = 0;
+
+            //averaging depth
+            // for (int x = int(pos.x + 0.5) - 1; x < int(pos.x + 0.5) + 1; x++)
+            // {
+            //     for (int y = int(pos.y + 0.5) - 1; y < int(pos.y + 0.5) + 1; y++)
+            //     {
+            //         tmp_depth = d_aligned_depth[y * image_width + x];
+            //         if (tmp_depth > 1)
+            //         {
+            //             depth += tmp_depth;
+            //             depth_counter++;
+            //         }
+            //     }
+            // }
+            // depth = depth / depth_counter;
+            score = d_score[idx];
+            depth = d_aligned_depth[int(pos.y + 0.5) * image_width + int(pos.y + 0.5)];
+
+            if (depth > 1 && score > 1.0f)
+            // if (score > 1.0f)
+            {
+                local_idx = atomicAdd(&warp_counter, 1);
+            }
+
+            __syncthreads();
+
+            if (threadIdx.x == 0 && warp_counter > 0)
+            {
+                global_idx = atomicAdd(d_valid_keypoints_num, warp_counter);
+                // printf("global_idx = atomicAdd %d", global_idx);
+            }
+
+            __syncthreads();
+
+            if (depth > 1 && score > 1.0f && warp_counter > 0)
+            // if (score > 1.0f && warp_counter > 0)
+            {
+                //each point is 3 x double
+                deproject_pixel_to_point_double(d_points + (global_idx + local_idx) * 3,
+                                                d_rgb_intrin,
+                                                (float *)(&pos),
+                                                float(depth));
+
+                d_descriptors_out[global_idx + local_idx] = d_descriptors_in[idx];
+                d_pos_out[global_idx + local_idx] = pos;
+                // printf("x: %.3f y: %.3f depth: %d\n", pos.x, pos.y, depth);
+            }
         }
     }
 
@@ -321,7 +377,6 @@ namespace Jetracer
 
         dim3 threads(RS2_CUDA_THREADS_PER_BLOCK, RS2_CUDA_THREADS_PER_BLOCK);
         dim3 depth_blocks(calc_block_size(image_width, threads.x), calc_block_size(image_height, threads.y));
-        dim3 other_blocks(calc_block_size(image_width, threads.x), calc_block_size(image_height, threads.y));
         dim3 mapping_blocks(depth_blocks.x, depth_blocks.y, 2);
 
         kernel_map_depth_to_other<<<mapping_blocks, threads, 0, stream>>>(d_pixel_map,
@@ -331,39 +386,60 @@ namespace Jetracer
                                                                           d_depth_to_other,
                                                                           depth_scale);
 
-        kernel_reset_to_max<<<other_blocks, threads, 0, stream>>>(d_aligned_out,
-                                                                   d_other_intrin);
+        kernel_reset_to_max<<<depth_blocks, threads, 0, stream>>>(d_aligned_out,
+                                                                  d_other_intrin);
 
         kernel_depth_to_other<<<depth_blocks, threads, 0, stream>>>(d_aligned_out,
                                                                     d_depth_in,
                                                                     d_pixel_map,
                                                                     d_depth_intrin,
                                                                     d_other_intrin);
-        kernel_reset_to_zero<<<other_blocks, threads, 0, stream>>>(d_aligned_out,
-            d_other_intrin);
-
-}
+        kernel_reset_to_zero<<<depth_blocks, threads, 0, stream>>>(d_aligned_out,
+                                                                   d_other_intrin);
+    }
 
     void keypoint_pixel_to_point(unsigned int *d_aligned_depth,
                                  const rs2_intrinsics *d_rgb_intrin,
                                  int image_width,
                                  int image_height,
-                                 float2 *d_pos,
+                                 float2 *d_pos_out,
+                                 float2 *d_pos_in,
+                                 float *d_score,
                                  double *d_points,
+                                 uint32_t *d_descriptors_out,
+                                 uint32_t *d_descriptors_in,
                                  int keypoints_num,
+                                 int *h_valid_keypoints_num,
+                                 int *d_valid_keypoints_num,
                                  cudaStream_t stream)
     {
+        h_valid_keypoints_num[0] = 0;
+        checkCudaErrors(cudaMemcpyAsync((void *)d_valid_keypoints_num,
+                                        h_valid_keypoints_num,
+                                        sizeof(int),
+                                        cudaMemcpyHostToDevice,
+                                        stream));
+
         dim3 threads(CUDA_WARP_SIZE);
-        int tmp_blocks = (keypoints_num % CUDA_WARP_SIZE == 0) ? keypoints_num / CUDA_WARP_SIZE : keypoints_num / CUDA_WARP_SIZE + 1;
-        dim3 blocks(tmp_blocks);
+        dim3 blocks(calc_block_size(keypoints_num, threads.x));
         kernel_keypoint_pixel_to_point<<<blocks, threads, 0, stream>>>(d_aligned_depth,
                                                                        d_rgb_intrin,
                                                                        image_width,
                                                                        image_height,
-                                                                       d_pos,
+                                                                       d_pos_out,
+                                                                       d_pos_in,
+                                                                       d_score,
                                                                        d_points,
-                                                                       keypoints_num);
-    }
+                                                                       d_descriptors_out,
+                                                                       d_descriptors_in,
+                                                                       keypoints_num,
+                                                                       d_valid_keypoints_num);
 
+        checkCudaErrors(cudaMemcpyAsync((void *)h_valid_keypoints_num,
+                                        d_valid_keypoints_num,
+                                        sizeof(int),
+                                        cudaMemcpyDeviceToHost,
+                                        stream));
+    }
 
 }

@@ -49,9 +49,15 @@ namespace Jetracer
                                  const rs2_intrinsics *d_rgb_intrin,
                                  int image_width,
                                  int image_height,
-                                 float2 *d_pos,
+                                 float2 *d_pos_out,
+                                 float2 *d_pos_in,
+                                 float *d_score,
                                  double *d_points,
+                                 uint32_t *d_descriptors_out,
+                                 uint32_t *d_descriptors_in,
                                  int keypoints_num,
+                                 int *h_valid_keypoints_num,
+                                 int *d_valid_keypoints_num,
                                  cudaStream_t stream);
 
 }

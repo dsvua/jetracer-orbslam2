@@ -37,17 +37,27 @@ namespace Jetracer
 
     typedef struct rgbd_frame
     {
-        rs2::depth_frame depth_frame = rs2::frame{};
-        rs2::video_frame rgb_frame = rs2::frame{};
+        // rs2::depth_frame depth_frame = rs2::frame{};
+        // rs2::video_frame rgb_frame = rs2::frame{};
+        uint16_t *depth_image;
+        unsigned char *rgb_image;
+        unsigned char *ir_image;
 
         float3 theta; // gyro and accel computed angles for this frame
 
-        // double timestamp;
-        // unsigned long long frame_id;
+        double timestamp;
+        unsigned long long depth_frame_id;
+        unsigned long long rgb_frame_id;
+        unsigned long long ir_frame_id;
 
-        // rs2_intrinsics depth_intristics;
-        // rs2_intrinsics rgb_intristics;
-        // rs2_extrinsics extrinsics;
+        int depth_image_size;
+        int rgb_image_size;
+        int ir_image_size;
+
+        rs2_intrinsics depth_intristics;
+        rs2_intrinsics rgb_intristics;
+        rs2_extrinsics extrinsics;
+        float depth_scale;
 
         // float depth_scale;
 
@@ -55,6 +65,16 @@ namespace Jetracer
         std::chrono::_V2::system_clock::time_point GPU_scheduled;
         std::chrono::_V2::system_clock::time_point GPU_callback;
         std::chrono::_V2::system_clock::time_point GPU_EventSent;
+
+        ~rgbd_frame()
+        {
+            if (depth_image)
+                free(depth_image);
+            if (rgb_image)
+                free(rgb_image);
+            if (ir_image)
+                free(ir_image);
+        }
 
     } rgbd_frame_t;
 

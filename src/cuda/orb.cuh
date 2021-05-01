@@ -2,6 +2,7 @@
 #define JETRACER_SLAM_ORB_H
 
 #include <cuda_runtime.h>
+#include <helper_cuda.h>
 
 namespace Jetracer
 {
@@ -16,7 +17,8 @@ namespace Jetracer
 
     void calc_orb(float *d_keypoints_angle,
                   float2 *d_keypoints_pos,
-                  unsigned char *d_descriptors, // size is keypoints_num x 32 x sizeof(char)
+                  unsigned char *d_descriptors_tmp, // size is keypoints_num x 32 x sizeof(char)
+                  uint32_t *d_descriptors,
                   unsigned char *image,
                   int image_pitch,
                   int image_width,

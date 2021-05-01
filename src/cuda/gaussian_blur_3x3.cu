@@ -61,14 +61,14 @@ namespace Jetracer
                            cudaStream_t stream)
     {
         //launch kernel
-        dim3 threads(32, 1);
-        dim3 blocks(image_width / 30 + 1, image_height);
+        dim3 threads(CUDA_WARP_SIZE, 1);
+        dim3 blocks(calc_block_size(image_width, 30), image_height);
         gaussian_blur_3x3_kernel<<<blocks, threads, 0, stream>>>(blurred_image,
                                                                  blurred_image_pitch,
                                                                  image,
                                                                  image_pitch,
                                                                  image_width,
                                                                  image_height);
-        CUDA_KERNEL_CHECK();
+        // CUDA_KERNEL_CHECK();
     }
 }

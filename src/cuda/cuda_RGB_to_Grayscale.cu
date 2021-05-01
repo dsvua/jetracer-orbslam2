@@ -24,11 +24,11 @@ namespace Jetracer
 
     void rgb_to_grayscale(unsigned char *dst, unsigned char *src, int cols, int rows, int dst_pitch, int src_pitch, cudaStream_t stream)
     {
-        dim3 threads(RS2_CUDA_THREADS_PER_BLOCK, RS2_CUDA_THREADS_PER_BLOCK);
+        dim3 threads(CUDA_WARP_SIZE, CUDA_WARP_SIZE);
         dim3 blocks(calc_block_size(cols, threads.x), calc_block_size(rows, threads.y));
         // std::cout << "---Mark---kernel_rgb_to_grayscale cols: " << cols << " rows " << rows << std::endl;
 
         kernel_rgb_to_grayscale<<<blocks, threads, 0, stream>>>(dst, src, cols, rows, dst_pitch, src_pitch);
-        CUDA_KERNEL_CHECK();
+        // CUDA_KERNEL_CHECK();
     }
 }

@@ -172,12 +172,12 @@ namespace Jetracer
             bson_message.add("channels", bson_value_type::bson_int32, &channels);
             bson_message.add("keypoints_x",
                              bson_value_type::bson_binary,
-                             slam_frame->keypoints_x.get(),
-                             slam_frame->keypoints_count * sizeof(uint16_t));
+                             slam_frame->keypoints_x,
+                             slam_frame->h_matched_keypoints_num * sizeof(uint16_t));
             bson_message.add("keypoints_y",
                              bson_value_type::bson_binary,
-                             slam_frame->keypoints_y.get(),
-                             slam_frame->keypoints_count * sizeof(uint16_t));
+                             slam_frame->keypoints_y,
+                             slam_frame->h_matched_keypoints_num * sizeof(uint16_t));
             bson_message.add("image",
                              bson_value_type::bson_binary,
                              slam_frame->image,

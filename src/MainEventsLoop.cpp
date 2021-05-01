@@ -49,12 +49,12 @@ namespace Jetracer
         // _started_threads.back()->setMaxQueueLength(_ctx->SaveRawData_max_queue_legth);
         // _started_threads.back()->createThread();
 
-        std::cout << "Starting WebSocket" << std::endl;
+        // std::cout << "Starting WebSocket" << std::endl;
         _started_threads.push_back(new Jetracer::WebSocketCom("WebSocketCom", _ctx));
         _started_threads.back()->setMaxQueueLength(_ctx->WebSocketCom_max_queue_legth);
         _started_threads.back()->createThread();
 
-        std::cout << "Starting SlamGpuPipeline" << std::endl;
+        // std::cout << "Starting SlamGpuPipeline" << std::endl;
         _started_threads.push_back(new Jetracer::SlamGpuPipeline("SlamGpuPipeline", _ctx));
         _started_threads.back()->setMaxQueueLength(_ctx->SlamGpuPipeline_max_queue_length);
         _started_threads.back()->createThread();

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 #include <algorithm> // for std::find_if
+#include <cstring>
 #include <librealsense2/rs_advanced_mode.hpp>
 
 // using namespace std;
@@ -30,37 +31,45 @@ namespace Jetracer
                     std::cout << " " << fr.get_profile().stream_name(); // will print: Depth Infrared 1
                 }
 
-                std::cout << " frame id: " << fs.get_depth_frame().get_frame_number()
-                          << " " << fs.get_infrared_frame().get_frame_number()
-                          << " " << fs.get_color_frame().get_frame_number() << std::endl;
-                // std::cout << " frame id: " << fs.get_depth_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << " "
-                //           << fs.get_color_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << std::endl;
-
                 auto rs_depth_frame = fs.get_depth_frame();
                 auto rs_rgb_frame = fs.get_color_frame();
+                auto rs_ir_frame = fs.get_infrared_frame();
                 auto image_height = rs_depth_frame.get_height();
                 auto image_width = rs_depth_frame.get_width();
 
-                fs.keep();
-                rs_depth_frame.keep();
-                rs_rgb_frame.keep();
+                std::cout << " frame id: " << rs_depth_frame.get_frame_number()
+                          << " " << rs_ir_frame.get_frame_number()
+                          << " " << rs_rgb_frame.get_frame_number() << std::endl;
+
+                // std::cout << " frame id: " << fs.get_depth_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << " "
+                //           << fs.get_color_frame().get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER) << std::endl;
+
+                // fs.keep();
+                // rs_depth_frame.keep();
+                // rs_rgb_frame.keep();
+                // rs_ir_frame.keep();
 
                 auto rgbd_frame = std::make_shared<rgbd_frame_t>();
 
-                rgbd_frame->depth_frame = rs_depth_frame;
-                rgbd_frame->rgb_frame = rs_rgb_frame;
+                // rgbd_frame->depth_frame = rs_depth_frame;
+                // rgbd_frame->rgb_frame = rs_rgb_frame;
 
-                // rgbd_frame->timestamp = rs_depth_frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
-                // rgbd_frame->frame_id = rs_rgb_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+                rgbd_frame->timestamp = rs_depth_frame.get_frame_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP);
+                // rgbd_frame->depth_frame_id = rs_depth_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+                // rgbd_frame->rgb_frame_id = rs_rgb_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+                // rgbd_frame->ir_frame_id = rs_ir_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_COUNTER);
+                rgbd_frame->depth_frame_id = rs_depth_frame.get_frame_number();
+                rgbd_frame->rgb_frame_id = rs_rgb_frame.get_frame_number();
+                rgbd_frame->ir_frame_id = rs_ir_frame.get_frame_number();
 
-                // auto depth_profile = rs_depth_frame.get_profile().as<rs2::video_stream_profile>();
-                // auto rgb_profile = rs_rgb_frame.get_profile().as<rs2::video_stream_profile>();
+                auto depth_profile = rs_depth_frame.get_profile().as<rs2::video_stream_profile>();
+                auto rgb_profile = rs_rgb_frame.get_profile().as<rs2::video_stream_profile>();
 
-                // rgbd_frame->depth_intristics = depth_profile.get_intrinsics();
-                // rgbd_frame->rgb_intristics = rgb_profile.get_intrinsics();
-                // rgbd_frame->extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
+                rgbd_frame->depth_intristics = depth_profile.get_intrinsics();
+                rgbd_frame->rgb_intristics = rgb_profile.get_intrinsics();
+                rgbd_frame->extrinsics = depth_profile.get_extrinsics_to(rgb_profile);
 
-                // rgbd_frame->depth_scale = rs_depth_frame.get_units();
+                rgbd_frame->depth_scale = rs_depth_frame.get_units();
 
                 // rgbd_frame->original_frame = fs;
                 // rgbd_frame->depth = fs.get_depth_frame().get_data();
@@ -71,6 +80,18 @@ namespace Jetracer
                 // rgbd_frame->frame_type = RS2_STREAM_COLOR;
                 // rgbd_frame->frame_type = RS2_STREAM_INFRARED;
                 // rgbd_frame->RS400_callback = std::chrono::high_resolution_clock::now();
+
+                rgbd_frame->depth_image_size = rs_depth_frame.get_data_size();
+                rgbd_frame->rgb_image_size = rs_rgb_frame.get_data_size();
+                rgbd_frame->ir_image_size = rs_ir_frame.get_data_size();
+
+                rgbd_frame->depth_image = (uint16_t *)malloc(rgbd_frame->depth_image_size * sizeof(char));
+                rgbd_frame->rgb_image = (unsigned char *)malloc(rgbd_frame->rgb_image_size * sizeof(char));
+                rgbd_frame->ir_image = (unsigned char *)malloc(rgbd_frame->ir_image_size * sizeof(char));
+
+                std::memcpy(rgbd_frame->depth_image, rs_depth_frame.get_data(), rgbd_frame->depth_image_size);
+                std::memcpy(rgbd_frame->rgb_image, rs_rgb_frame.get_data(), rgbd_frame->rgb_image_size);
+                std::memcpy(rgbd_frame->ir_image, rs_ir_frame.get_data(), rgbd_frame->ir_image_size);
 
                 event->event_type = EventType::event_realsense_D400_rgbd;
                 event->message = rgbd_frame;

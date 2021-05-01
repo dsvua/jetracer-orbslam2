@@ -7,6 +7,7 @@
 #include "../Context.h"
 #include "../Events/BaseEvent.h"
 #include "../Events/EventTypes.h"
+#include "types.h"
 #include <mutex>
 #include <atomic>
 #include <thread>
@@ -26,41 +27,6 @@
 
 namespace Jetracer
 {
-
-#pragma once
-
-    typedef struct slam_frame_callback
-    {
-        std::shared_ptr<rgbd_frame_t> rgbd_frame;
-        bool image_ready_for_process;
-        std::thread gpu_thread;
-        std::mutex thread_mutex;
-        std::condition_variable thread_cv;
-
-    } slam_frame_callback_t;
-
-    typedef struct slam_frame
-    {
-        unsigned char *image;
-        size_t image_length;
-        std::shared_ptr<uint16_t[]> keypoints_x;
-        std::shared_ptr<uint16_t[]> keypoints_y;
-        std::shared_ptr<double[]> h_points;
-        int keypoints_count;
-        float3 theta;
-        std::shared_ptr<rgbd_frame_t> rgbd_frame;
-
-        Eigen::Matrix4d T_c2w;
-        Eigen::Matrix4d T_w2c;
-
-        ~slam_frame()
-        {
-            delete image;
-            // T_c2w.~MatrixBase();
-            // T_w2c.~MatrixBase();
-        }
-
-    } slam_frame_t;
 
     class SlamGpuPipeline : public EventsThread
     {
@@ -91,7 +57,6 @@ namespace Jetracer
         unsigned long long depth_prev_frame_id = 0;
 
         bool intristics_are_known = false;
-        bool exit_gpu_pipeline = false;
         std::mutex m_gpu_mutex;
 
         float depth_scale;

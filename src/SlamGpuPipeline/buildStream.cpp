@@ -71,6 +71,7 @@ namespace Jetracer
 
         if (R.determinant() < 0)
         {
+            std::cout << "R.determinant() < 0" << std::endl;
             Vt.block<1, 3>(2, 0) *= -1;
             R = Vt.transpose() * U.transpose();
         }
@@ -223,8 +224,11 @@ namespace Jetracer
         // float *d_keypoints_response;
         float *d_keypoints_angle;
         // float2 *d_keypoints_pos;
-        unsigned char *d_descriptors;
-        uint32_t *d_descriptors_bin; // convert 32xchars into 1 x uint32_t
+        unsigned char *d_descriptors_tmp;
+        uint32_t *d_descriptors; // convert 32xchars into 1 x uint32_t
+        int *d_valid_keypoints_num;
+        int *d_keypoints_num_matched;
+        int h_valid_keypoints_num = 0;
 
         int grid_cols = (_ctx->cam_w + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
         int grid_rows = (_ctx->cam_h + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
@@ -250,8 +254,10 @@ namespace Jetracer
         // checkCudaErrors(cudaMalloc((void **)&d_keypoints_response, keypoints_num * sizeof(float)));
         checkCudaErrors(cudaMalloc((void **)&d_keypoints_angle, keypoints_num * sizeof(float)));
         // checkCudaErrors(cudaMalloc((void **)&d_keypoints_pos, keypoints_num * sizeof(float2)));
-        checkCudaErrors(cudaMalloc((void **)&d_descriptors, keypoints_num * 32 * sizeof(unsigned char)));
-        checkCudaErrors(cudaMalloc((void **)&d_descriptors_bin, keypoints_num * sizeof(uint32_t)));
+        checkCudaErrors(cudaMalloc((void **)&d_descriptors_tmp, keypoints_num * 32 * sizeof(unsigned char)));
+        checkCudaErrors(cudaMalloc((void **)&d_descriptors, keypoints_num * sizeof(uint32_t)));
+        checkCudaErrors(cudaMalloc((void **)&d_valid_keypoints_num, sizeof(int)));
+        checkCudaErrors(cudaMalloc((void **)&d_keypoints_num_matched, sizeof(int)));
 
         unsigned char *d_corner_lut;
         checkCudaErrors(cudaMalloc((void **)&d_corner_lut, 64 * 1024));
@@ -288,19 +294,16 @@ namespace Jetracer
         float2 *d_pos = (float2 *)(d_feature_grid);
         float *d_score = (d_feature_grid + keypoints_num * 2);
         int *d_level = (int *)(d_feature_grid + keypoints_num * 3);
-        double *d_points;
-        double *d_points_prev;
+        // double *d_points;
+        // double *d_points_prev;
         double *d_matched_points;
         double *d_matched_points_prev;
         int *d_matched_points_num; // should make sure there 3 or more points matched
-        checkCudaErrors(cudaMalloc((void **)&d_points, keypoints_num * 3 * sizeof(double)));
-        checkCudaErrors(cudaMalloc((void **)&d_points_prev, keypoints_num * 3 * sizeof(double)));
+        // checkCudaErrors(cudaMalloc((void **)&d_points, keypoints_num * 3 * sizeof(double)));
+        // checkCudaErrors(cudaMalloc((void **)&d_points_prev, keypoints_num * 3 * sizeof(double)));
         checkCudaErrors(cudaMalloc((void **)&d_matched_points, keypoints_num * 3 * sizeof(double)));
         checkCudaErrors(cudaMalloc((void **)&d_matched_points_prev, keypoints_num * 3 * sizeof(double)));
         checkCudaErrors(cudaMalloc((void **)&d_matched_points_num, sizeof(int)));
-
-        std::shared_ptr<uint16_t[]> keypoints_x(new uint16_t[keypoints_num]);
-        std::shared_ptr<uint16_t[]> keypoints_y(new uint16_t[keypoints_num]);
 
         // Preparing image pyramid
         std::vector<pyramid_t> pyramid;
@@ -334,34 +337,44 @@ namespace Jetracer
 
         fast_gpu_calculate_lut(d_corner_lut, FAST_MIN_ARC_LENGTH);
 
-        Eigen::MatrixXd previous_points;
+        int h_valid_keypoints_num_previous = 500;
         Eigen::Matrix4d T_w2c;
-        std::shared_ptr<Jetracer::slam_frame_t> previous_frame = nullptr;
+        std::shared_ptr<Jetracer::slam_frame_t> previous_frame1 = nullptr;
+        std::shared_ptr<Jetracer::slam_frame_t> previous_frame2 = nullptr;
 
-        while (!exit_gpu_pipeline)
+        while (!slam_frames[slam_frames_id]->exit_gpu_pipeline)
         {
             std::unique_lock<std::mutex> lk(slam_frames[slam_frames_id]->thread_mutex);
-            while (!slam_frames[slam_frames_id]->image_ready_for_process)
+            while (!slam_frames[slam_frames_id]->image_ready_for_process && !slam_frames[slam_frames_id]->exit_gpu_pipeline)
                 slam_frames[slam_frames_id]->thread_cv.wait(lk);
 
             if (!slam_frames[slam_frames_id]->image_ready_for_process)
                 continue;
 
             std::shared_ptr<Jetracer::slam_frame_t> slam_frame = std::make_shared<slam_frame_t>();
+            slam_frame->theta = slam_frames[slam_frames_id]->rgbd_frame->theta;
             // slam_frame->image = (unsigned char *)malloc(_ctx->cam_h * _ctx->cam_w * sizeof(char));
+
+            int h_keypoints_num_matched = 0;
 
             std::shared_ptr<float[]> h_feature_grid(new float[keypoints_num * 4]);
             float2 *h_pos = (float2 *)(h_feature_grid.get());
             float *h_score = reinterpret_cast<float *>(h_feature_grid.get() + keypoints_num * 2);
             int *h_level = (int *)(h_feature_grid.get() + keypoints_num * 3);
             std::shared_ptr<double[]> h_points(new double[keypoints_num * 3]);
+            std::shared_ptr<uint32_t[]> h_descriptors(new uint32_t[keypoints_num]);
+            std::shared_ptr<double3[]> h_current_matched_points(new double3[keypoints_num]);
+            std::shared_ptr<double3[]> h_previous_matched_points(new double3[keypoints_num]);
+            checkCudaErrors(cudaMalloc((void **)&slam_frame->d_points, keypoints_num * 3 * sizeof(double)));
+            checkCudaErrors(cudaMalloc((void **)&slam_frame->d_descriptors, keypoints_num * sizeof(uint32_t)));
+            checkCudaErrors(cudaMalloc((void **)&slam_frame->d_pos, keypoints_num * sizeof(float2)));
 
             std::chrono::_V2::system_clock::time_point stop;
             std::chrono::_V2::system_clock::time_point start = high_resolution_clock::now();
 
             // --------------- align depth to RGB -----------------
             checkCudaErrors(cudaMemcpyAsync((void *)d_depth_in,
-                                            slam_frames[slam_frames_id]->rgbd_frame->depth_frame.get_data(),
+                                            slam_frames[slam_frames_id]->rgbd_frame->depth_image,
                                             _ctx->cam_w * sizeof(uint16_t) * _ctx->cam_h,
                                             cudaMemcpyHostToDevice,
                                             align_stream));
@@ -385,7 +398,7 @@ namespace Jetracer
             //--------------- Keypoints find/compute -------------
             checkCudaErrors(cudaMemcpy2DAsync((void *)d_rgb_image,
                                               rgb_pitch,
-                                              slam_frames[slam_frames_id]->rgbd_frame->rgb_frame.get_data(),
+                                              slam_frames[slam_frames_id]->rgbd_frame->rgb_image,
                                               _ctx->cam_w * 3,
                                               _ctx->cam_w * 3,
                                               _ctx->cam_h,
@@ -437,6 +450,7 @@ namespace Jetracer
 
             calc_orb(d_keypoints_angle,
                      d_pos,
+                     d_descriptors_tmp,
                      d_descriptors,
                      pyramid[0].image,
                      pyramid[0].image_pitch,
@@ -448,6 +462,27 @@ namespace Jetracer
             checkCudaErrors(cudaMemcpyAsync((void *)h_feature_grid.get(),
                                             d_feature_grid,
                                             feature_grid_bytes,
+                                            cudaMemcpyDeviceToHost,
+                                            stream));
+
+            keypoint_pixel_to_point(d_aligned_out,
+                                    _d_rgb_intrinsics,
+                                    _ctx->cam_w,
+                                    _ctx->cam_h,
+                                    slam_frame->d_pos,
+                                    d_pos,
+                                    d_score,
+                                    slam_frame->d_points,
+                                    slam_frame->d_descriptors,
+                                    d_descriptors,
+                                    keypoints_num,
+                                    &h_valid_keypoints_num,
+                                    d_valid_keypoints_num,
+                                    stream);
+
+            checkCudaErrors(cudaMemcpyAsync((void *)h_points.get(),
+                                            slam_frame->d_points,
+                                            h_valid_keypoints_num * 3 * sizeof(double),
                                             cudaMemcpyDeviceToHost,
                                             stream));
 
@@ -472,32 +507,108 @@ namespace Jetracer
             };
 
             // overlay keypoints on grayscale or color image
+            checkCudaErrors(cudaStreamSynchronize(stream));
             overlay_keypoints(nv_image.channel[1],
                               nv_image.pitch[1],
-                              _ctx->cam_h,
-                              d_pos,
+                              slam_frame->d_pos,
                               d_aligned_out,
-                              keypoints_num,
+                              h_valid_keypoints_num,
+                              _d_rgb_intrinsics,
                               nvjpeg_stream);
 
             // Compress image
             CHECK_NVJPEG(nvjpegEncodeImage(nv_handle, nv_enc_state, nv_enc_params,
                                            &nv_image, NVJPEG_INPUT_RGB, _ctx->cam_w, _ctx->cam_h, nvjpeg_stream));
 
-            keypoint_pixel_to_point(d_aligned_out,
-                                    _d_rgb_intrinsics,
-                                    _ctx->cam_w,
-                                    _ctx->cam_h,
-                                    d_pos,
-                                    d_points,
-                                    keypoints_num,
-                                    stream);
+            if (previous_frame1)
+            {
+                Eigen::Matrix4d T_w2c_prev_curr = Eigen::Matrix4d::Identity();
+                Eigen::Matrix4d T_c2w_prev_curr = Eigen::Matrix4d::Identity();
 
-            checkCudaErrors(cudaMemcpyAsync((void *)h_points.get(),
-                                            d_points,
-                                            keypoints_num * 3 * sizeof(double),
-                                            cudaMemcpyDeviceToHost,
-                                            stream));
+                if (previous_frame2)
+                {
+
+                    // std::cout << "previous_frame2->T_w2c" << std::endl
+                    //           << previous_frame2->T_w2c << std::endl;
+                    // std::cout << "previous_frame1->T_w2c" << std::endl
+                    //           << previous_frame1->T_w2c << std::endl;
+
+                    T_w2c_prev_curr = previous_frame1->T_w2c * previous_frame2->T_w2c.inverse() * previous_frame1->T_w2c;
+                    // Eigen::Quaterniond q1(previous_frame1->T_w2c.rotation());
+                }
+
+                T_w2c_prev_curr.setIdentity();
+
+                // std::cout << "T_w2c_prev_curr" << std::endl
+                //           << T_w2c_prev_curr << std::endl;
+
+                match_keypoints(slam_frame,
+                                previous_frame1,
+                                2,
+                                4,
+                                T_w2c_prev_curr,
+                                d_valid_keypoints_num,
+                                d_keypoints_num_matched,
+                                &h_keypoints_num_matched,
+                                h_current_matched_points.get(),
+                                h_previous_matched_points.get(),
+                                _d_rgb_intrinsics,
+                                stream);
+
+                if (h_keypoints_num_matched > 2)
+                {
+                    Eigen::Map<Eigen::MatrixXd> current_points((double *)h_current_matched_points.get(), 3, h_keypoints_num_matched);
+                    Eigen::Map<Eigen::MatrixXd> previous_points((double *)h_previous_matched_points.get(), 3, h_keypoints_num_matched);
+
+                    // Eigen::MatrixXd A = previous_points.transpose();
+                    // Eigen::MatrixXd B = current_points.transpose();
+
+                    // std::cout << "Matching points" << std::endl;
+                    // for (int i = 0; i < h_keypoints_num_matched; i++)
+                    // {
+                    //     std::cout << A.block<1, 3>(i, 0) << "\t\t" << B.block<1, 3>(i, 0) << std::endl;
+                    // }
+
+                    // T_c2w_prev_curr = best_fit_transform(previous_points.transpose(), current_points.transpose());
+                }
+                else
+                {
+                    T_w2c_prev_curr.setIdentity();
+                    // slam_frame->T_c2w = Eigen::Matrix4d::Identity();
+                    // slam_frame->T_w2c = Eigen::Matrix4d::Identity();
+                }
+
+                // slam_frame->T_c2w = T_c2w_prev_curr * previous_frame1->T_c2w;
+                // slam_frame->T_w2c = slam_frame->T_c2w.inverse();
+                slam_frame->T_c2w = Eigen::Matrix4d::Identity();
+                slam_frame->T_w2c = Eigen::Matrix4d::Identity();
+
+                // getting rotation angles
+                Eigen::Matrix3d R = T_c2w_prev_curr.block<3, 3>(0, 0);
+                Vector3d eu_angles = R.eulerAngles(0, 1, 2);
+                Vector3d angles(floor(eu_angles(0) * 180 / CUDART_PI_D),
+                                floor(eu_angles(1) * 180 / CUDART_PI_D),
+                                floor(eu_angles(2) * 180 / CUDART_PI_D));
+
+                std::cout << std::endl
+                          << "eu_angles" << std::endl
+                          << eu_angles << std::endl
+                          << "angles" << std::endl
+                          << angles << std::endl
+                          << "T_c2w_prev_curr" << std::endl
+                          << T_c2w_prev_curr << std::endl
+                          << "slam_frame->T_c2w" << std::endl
+                          << slam_frame->T_c2w << std::endl;
+            }
+            else
+            {
+                slam_frame->T_c2w = Eigen::Matrix4d::Identity();
+                slam_frame->T_w2c = Eigen::Matrix4d::Identity();
+                h_keypoints_num_matched = keypoints_num;
+            }
+            // -------------------------------------------------
+            // TODO: convert cudaStreamSynchronize to use events
+            // -------------------------------------------------
 
             // download compressed image to host
             checkCudaErrors(cudaStreamSynchronize(nvjpeg_stream));
@@ -507,40 +618,11 @@ namespace Jetracer
             slam_frame->image = (unsigned char *)malloc(length * sizeof(char));
             slam_frame->image_length = length;
             CHECK_NVJPEG(nvjpegEncodeRetrieveBitstream(nv_handle, nv_enc_state, (slam_frame->image), &length, nvjpeg_stream));
-            // checkCudaErrors(cudaStreamSynchronize(nvjpeg_stream));
+            checkCudaErrors(cudaStreamSynchronize(nvjpeg_stream));
             checkCudaErrors(cudaStreamSynchronize(stream));
-            slam_frame->h_points = h_points;
 
             stop = high_resolution_clock::now();
-
-            // Eigen::MatrixXd current_points = Map<Matrix<double, 3, keypoints_num>>(h_points.get());
-            Eigen::Map<Eigen::MatrixXd> current_points(h_points.get(), 3, keypoints_num);
-
-            // need to filter inliers before finding transformation matrix
-            // Eigen::Matrix4d T_w2c_prev_curr;
-            // if (previous_frame)
-            // {
-            //     std::cout << "starting ICP" << std::endl;
-            //     std::cout << previous_points.transpose() << std::endl;
-            //     std::cout << current_points.transpose() << std::endl;
-            //     // Eigen::Matrix4d T_w2c_prev_curr = best_fit_transform(previous_points.transpose(), current_points.transpose());
-            //     Eigen::Matrix4d T_w2c_prev_curr = icp(previous_points.transpose(), current_points.transpose(), 20, 0.000001);
-            //     std::cout << "done ICP" << std::endl;
-            // }
-
-            // std::cout << T_w2c_prev_curr << std::endl;
-
             auto rotation_timer = high_resolution_clock::now();
-            previous_points = current_points;
-
-            // copy keypoints to slam_frame
-            slam_frame->keypoints_count = 0;
-#pragma unroll
-            for (int i = 0; i < keypoints_num; i++)
-            {
-                keypoints_x[i] = uint16_t(h_pos[i].x);
-                keypoints_y[i] = uint16_t(h_pos[i].y);
-            }
 
             // sleep(2);
             // std::cout << "cudaStreamSynchronize" << std::endl;
@@ -552,27 +634,30 @@ namespace Jetracer
 
             // slam_frame->image = image;
             slam_frame->keypoints_count = keypoints_num;
-
-            slam_frame->keypoints_x = keypoints_x;
-            slam_frame->keypoints_y = keypoints_y;
-            slam_frame->theta = theta;
-            // std::cout << "Keypoints are exported" << std::endl;
+            slam_frame->h_matched_keypoints_num = h_keypoints_num_matched;
+            slam_frame->h_points = h_points;
+            slam_frame->h_valid_keypoints_num = h_valid_keypoints_num;
 
             pEvent newEvent = std::make_shared<BaseEvent>();
             newEvent->event_type = EventType::event_gpu_slam_frame;
             newEvent->message = slam_frame;
-            _ctx->sendEvent(newEvent);
+            if (previous_frame2)
+                _ctx->sendEvent(newEvent);
 
             slam_frames[slam_frames_id]->image_ready_for_process = false;
 
             std::lock_guard<std::mutex> lock(m_gpu_mutex);
             deleted_slam_frames.push_back(slam_frames_id);
 
-            previous_frame = slam_frame;
+            if (previous_frame1)
+                previous_frame2 = previous_frame1;
+            previous_frame1 = slam_frame;
+            h_valid_keypoints_num_previous = h_valid_keypoints_num;
 
             std::cout << "Finished work GPU thread " << slam_frames_id
                       << " duration " << duration.count()
                       << " duration_rotation " << duration_rotation.count()
+                      << " h_valid_keypoints_num " << h_valid_keypoints_num
                       //   << " theta.x " << theta.x
                       //   << " theta.y " << theta.y
                       //   << " theta.z " << theta.z
@@ -586,7 +671,9 @@ namespace Jetracer
         checkCudaErrors(cudaFree(d_depth_in));
         // checkCudaErrors(cudaFree(d_keypoints_exist));
         // checkCudaErrors(cudaFree(d_keypoints_response));
+        printf("---mark---");
         checkCudaErrors(cudaFree(d_keypoints_angle));
+        checkCudaErrors(cudaFree(d_descriptors_tmp));
         checkCudaErrors(cudaFree(d_descriptors));
 
         std::cout << "Stopped GPU thread " << slam_frames_id << std::endl;

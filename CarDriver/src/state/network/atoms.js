@@ -17,6 +17,6 @@ export const connectionStateUrl = atom({
 
 export const showVideoState = atom({
     key: 'show-video-state-atom',
-    default: false,
+    default: true,
 });
 

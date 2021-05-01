@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.2.1-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.3.0-cudnn8-devel-ubuntu20.04
 # FROM nvidia/cuda-arm64:10.2-cudnn8-devel-ubuntu18.04
 # FROM nvcr.io/nvidia/l4t-base:r32.5.0
 

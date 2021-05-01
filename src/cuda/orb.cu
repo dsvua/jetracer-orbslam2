@@ -9,7 +9,7 @@ namespace Jetracer
 
     __constant__ unsigned char c_pattern[sizeof(int2) * 512];
 
-#define GET_VALUE(idx)                                                     \
+#define GET_VALUE(idx)                                                                      \
     image[(loc.y + __float2int_rn(pattern[idx].x * b + pattern[idx].y * a)) * image_pitch + \
           loc.x + __float2int_rn(pattern[idx].x * a - pattern[idx].y * b)]
 
@@ -33,7 +33,7 @@ namespace Jetracer
         unsigned char *desc = d_descriptors;
         if (loc.x < 17 || loc.x > image_width - 17 || loc.y < 17 || loc.y > image_height - 17)
         {
-            desc[tid] = 0;
+            desc[id * 32 + tid] = 0;
             return;
         }
 
@@ -71,7 +71,7 @@ namespace Jetracer
         t1 = GET_VALUE(15);
         val |= (t0 < t1) << 7;
 
-        desc[tid] = (unsigned char)val;
+        desc[id * 32 + tid] = (unsigned char)val;
     }
 
     __global__ void compute_fast_angle_kernel(float *d_keypoints_angle,
@@ -141,6 +141,33 @@ namespace Jetracer
         }
     }
 
+    // compress 32 x chars to 1 x uint32_t to be able to use bitwise operations
+    __global__ void compress_descriptors_kernel(unsigned char *d_descriptors_tmp,
+                                                uint32_t *d_descriptors,
+                                                int keypoints_num)
+    {
+        uint32_t descriptor = 0;
+        uint32_t d_one = 1;
+        int idx = blockDim.x * blockIdx.x + threadIdx.x;
+        if (idx < keypoints_num)
+        {
+            for (int i = 0; i < 32; i++)
+            {
+                if (d_descriptors_tmp[idx * 32 + i] == 1)
+                {
+                    descriptor = descriptor | (d_one << i);
+                }
+            }
+        }
+
+        __syncthreads();
+
+        if (idx < keypoints_num)
+        {
+            d_descriptors[idx] = descriptor;
+        }
+    }
+
     void compute_fast_angle(float *d_keypoints_angle,
                             float2 *d_keypoints_pos,
                             unsigned char *image,
@@ -163,7 +190,8 @@ namespace Jetracer
 
     void calc_orb(float *d_keypoints_angle,
                   float2 *d_keypoints_pos,
-                  unsigned char *d_descriptors,
+                  unsigned char *d_descriptors_tmp,
+                  uint32_t *d_descriptors,
                   unsigned char *image,
                   int image_pitch,
                   int image_width,
@@ -171,15 +199,20 @@ namespace Jetracer
                   int keypoints_num,
                   cudaStream_t stream)
     {
-        calc_orb_kernel<<<keypoints_num, 32, 0, stream>>>(d_keypoints_angle,
-                                                          d_keypoints_pos,
-                                                          d_descriptors,
-                                                          image,
-                                                          image_pitch,
-                                                          image_width,
-                                                          image_height,
-                                                          keypoints_num);
+        calc_orb_kernel<<<keypoints_num, CUDA_WARP_SIZE, 0, stream>>>(d_keypoints_angle,
+                                                                      d_keypoints_pos,
+                                                                      d_descriptors_tmp,
+                                                                      image,
+                                                                      image_pitch,
+                                                                      image_width,
+                                                                      image_height,
+                                                                      keypoints_num);
         // CUDA_KERNEL_CHECK();
+        dim3 threads(CUDA_WARP_SIZE);
+        dim3 blocks(calc_block_size(keypoints_num, threads.x));
+        compress_descriptors_kernel<<<blocks, threads, 0, stream>>>(d_descriptors_tmp,
+                                                                    d_descriptors,
+                                                                    keypoints_num);
     }
 
     void loadPattern()

@@ -39,21 +39,24 @@
 #include <cuda_runtime_api.h>
 #include <helper_cuda.h>
 
+namespace Jetracer
+{
+
 #ifndef FULL_MASK
 #define FULL_MASK 0xffffffff
 #endif
 
 #ifndef CUDART_PI_F
 #define CUDART_PI_F 3.141592654f
+#endif
+
+#ifndef CUDART_PI_D
 #define CUDART_PI_D 3.14159265358979323846
 #endif
 
 #ifndef CUDA_WARP_SIZE
 #define CUDA_WARP_SIZE 32
 #endif
-
-namespace Jetracer
-{
 
     struct kernel_params
     {
@@ -138,5 +141,7 @@ namespace Jetracer
                                               unsigned int height,
                                               unsigned int tpb_x,
                                               unsigned int tpb_y);
+
+    int calc_block_size(int pixel_count, int thread_count);
 
 } // namespace Jetracer
